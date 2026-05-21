@@ -20,7 +20,7 @@ h3#room-info {
     text-align: center;
 }
 .hidden {
-    display: none;
+    display: none !important;
 }
 #game-screen {
     flex: 1;

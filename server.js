@@ -777,6 +777,7 @@ io.on("connection", (socket) => {
             wpm: 0,
         };
         touchRoom(room, "codetyper-rejoin-room");
+        io.to(roomCode).emit("codetyper-progress-update", room.codeTyperMultiplayer.players);
     });
 
     socket.on("codetyper-progress", ({ roomCode, progress, wpm }) => {
