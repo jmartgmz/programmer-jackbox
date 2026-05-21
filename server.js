@@ -842,7 +842,24 @@ io.on("connection", (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, "0.0.0.0", () => {
+    let hostIp = "<your-ip>";
+    try {
+        const _os = require("os");
+        const interfaces = _os.networkInterfaces();
+        for (const name of Object.keys(interfaces)) {
+            for (const iface of interfaces[name]) {
+                if (iface.family === "IPv4" && !iface.internal) {
+                    hostIp = iface.address;
+                    break;
+                }
+            }
+            if (hostIp !== "<your-ip>") break;
+        }
+    } catch (e) {
+        // Fallback to placeholder if something goes wrong
+    }
+
     console.log(`Server running on port ${PORT}`);
     console.log(`Localhost: http://localhost:${PORT}`);
-    console.log(`Accessible from local network: http://<your-ip>:${PORT}`);
+    console.log(`Accessible from local network: http://${hostIp}:${PORT}`);
 });
