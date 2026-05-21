@@ -37,7 +37,7 @@
         "minPlayers": 1,
         "type": "singleplayer",
         "launchType": "redirect",
-        "url": "/codeTyper/",
+        "url": "/code-typer/",
         "icon": "⌨️"
     },
     {
@@ -47,7 +47,7 @@
         "minPlayers": 1,
         "type": "singleplayer",
         "launchType": "redirect",
-        "url": "/flexboxSpider/",
+        "url": "/flexbox-spider/",
         "icon": "🕷️"
     },
     {
@@ -57,7 +57,7 @@
         "minPlayers": 1,
         "type": "singleplayer",
         "launchType": "redirect",
-        "url": "/escapeTheLoop/",
+        "url": "/escape-the-loop/",
         "icon": "🤖"
     }
 ]

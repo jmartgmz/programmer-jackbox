@@ -1,10 +1,11 @@
 /**
- * Test file for LogicCAH and ProgrammerProphunt game logic
+ * @file test.js
+ * @description Test runner for LogicCAH and ProgrammerProphunt game logic
  * Run with: node test.js
  */
 
-const LogicCAH = require("./gameModes/LogicCAH/LogicCAH.js");
-const ProgrammerProphunt = require("./gameModes/programmerProphunt/ProgrammerProphunt.js");
+const LogicCAH = require("./gameModes/logic-cah/logic-cah.js");
+const ProgrammerProphunt = require("./gameModes/programmer-prophunt/programmer-prophunt.js");
 
 // ============================================
 // TEST SETUP

@@ -1,92 +1,97 @@
-# ProgrammerJackbox
+# Programmer Jackbox
 
-## Description
+A browser-based party game platform for developers. One player hosts a room, everyone else joins with a 6-character code, and you play together in real time.
 
-ProgrammerJackbox is a local multiplayer game server built with Express and Socket.IO. Players join a shared room by code — one player hosts, others join using the room code.
+## Game Modes
 
-The server supports the following game modes:
+### Multiplayer
 
-- **LogicCAH** — Logic-based prompt/answer selection game, inspired by Cards Against Humanity.
-- **ProgrammerProphunt** — Coders hide in code lines and finders guess the hidden player.
-- **CodeTyper** — Single-player speed-typing challenge with code snippets.
-- **CodeTyper Multiplayer** — Competitive multiplayer code-typing race.
-- **Escape the Loop** — Single-player grid puzzle where you program a robot to escape.
-- **Flexbox Spider** — CSS Flexbox-based puzzle game.
-- **Bug Fixer** — Find and fix bugs in code snippets.
-- **Optimizer** — Optimize code to meet performance targets.
+| Game | Players | Description |
+|---|---|---|
+| **Bug Fixer** | 3+ | Pitch the best bug-fix strategy card to the round's decider |
+| **Code Typer (Versus)** | 2+ | Race opponents to type code snippets the fastest |
+| **Logic CAH** | 4+ | Logic-based card prompts — players answer, decider picks the best |
+| **Programmer Prophunt** | 4+ | Hiders plant suspicious lines of code; finders must spot them |
 
-## Setup and Installation
+### Solo Arcade
 
-### Prerequisites
+| Game | Description |
+|---|---|
+| **Code Typer** | Speed-type code snippets as fast and accurately as possible |
+| **Flexbox Spider** | Control a spider using CSS flexbox properties to reach its web |
+| **Escape the Loop** | Program a robot to navigate a factory floor with drag-and-drop logic blocks |
 
-- [Node.js](https://nodejs.org/) (v18 or later recommended)
-- npm (included with Node.js)
+## Setup
 
-### Installation
+**Prerequisites:** Node.js v18+ and npm.
 
 ```bash
 git clone https://github.com/BenBank11/ProgrammerJackbox.git
 cd ProgrammerJackbox
 npm install
+npm start
 ```
 
-## Running Locally
+- **Local:** `http://localhost:3000`
+- **LAN:** `http://<host-ip>:3000` — other devices on the same network can connect directly
 
-The server binds to `0.0.0.0` by default, making it accessible to other devices on the same local network.
+> Make sure your firewall allows inbound connections on the configured port.
 
-- **Local access:** `http://localhost:3000`
-- **LAN access:** Use the host machine's local IP (e.g. `http://192.168.1.x:3000`). Other devices on the same Wi-Fi/LAN can connect using this address.
+## Development
 
-> **Note:** Ensure your firewall allows inbound connections on the configured port.
+```bash
+npm run dev          # start with --watch (auto-restarts on file changes)
+npm run sim:all      # run all socket simulation scripts against a running server
+npm run lint         # ESLint
+npm run format       # Prettier
+```
 
-## Deployment
+Individual simulation scripts are also available (`npm run sim:lobby`, `npm run sim:bugfixer`, etc.) for testing specific game flows without a browser.
 
-This project can be deployed as a **Web Service** on [Render](https://render.com):
+## Deployment (Render)
 
-1. Connect your GitHub repository to Render.
-2. Create a new **Web Service** with the following settings:
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-3. Render automatically sets the `PORT` environment variable — no manual configuration needed.
-4. Once deployed, Render provides a public `.onrender.com` URL for access.
+1. Connect the GitHub repository to [Render](https://render.com) as a **Web Service**
+2. Set **Build Command** to `npm install` and **Start Command** to `npm start`
+3. Render injects `PORT` automatically — no manual config needed
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PORT` | Port the server listens on | `3000` |
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `3000` | Port the server listens on |
 
-No `.env` file is required for local development. If you need to override the port, set the variable before starting the server:
+## Architecture
 
-```bash
-PORT=8080 npm start
+```
+server.js                  — Express + Socket.IO entry point, room management
+src/
+  room-manager.js          — Room creation, joins, player tracking
+  constants.js             — Shared constants
+  utils.js                 — Shared utilities
+public/
+  index.html               — Main lobby UI
+  style.css                — Global design system (dark monospace theme)
+  client.js                — Lobby socket client, game card rendering
+  gamemodes.json           — Game mode registry (name, description, min players)
+gameModes/
+  bug-fixer/               — Bug Fixer game + service module
+  code-typer/              — Solo Code Typer
+  code-typer-multiplayer/  — Versus Code Typer
+  escape-the-loop/         — Escape the Loop solo puzzle
+  flexbox-spider/          — Flexbox Spider solo puzzle
+  logic-cah/               — Logic CAH multiplayer
+  programmer-prophunt/     — Programmer Prophunt + service module
 ```
 
-## Architecture Overview
-
-This is a basic Node.js and Express app. It uses Socket.IO to handle the multiplayer lobbies and keep players in sync. Multiplayer games run their main logic on the server and talk to the browsers, while single-player games just load as normal web pages.
-
-## Project Structure
-
-- `server.js`: Handles the server, socket connections, and rooms.
-- `public/`: The main lobby files (HTML, CSS, and some JS to connect).
-- `gameModes/`: Folders for each game. These usually have their own HTML, CSS, and JS files, plus any server code they need.
+Multiplayer games run logic on the server via a service module and push state to clients over Socket.IO. Single-player games are standalone pages loaded via redirect.
 
 ## Known Issues
 
-- `optimizerGame` is on the list but isn't built yet.
-- You can't switch lobbies from private to public, which means "Quick Play" is broken.
-- The chat doesn't work (players can't see messages from each other).
-- The Profile and Settings pages are just placeholders for now.
-- The styling is a bit all over the place between the main site and the different games.
-- Nothing saves if the server restarts because there's no database.
-- There are some old, unused Python scripts lying around, and `bugFixerGame` has too much of its code crammed into `server.js`.
+- Quick play / public lobbies are not fully working
+- Profile and Settings screens are UI placeholders — nothing persists
+- No database; all room state is lost on server restart
+- The Optimizer game mode exists as a folder but is not implemented
 
-## Future Work
+## Contributing
 
-- Fix the public lobbies and get the chat working.
-- Move the `bugFixerGame` code out of `server.js` so it matches how the other games are set up.
-- Delete the old Python files.
-- Clean up the CSS so everything looks like it belongs to the same game.
-- Finish building `programmerProphunt` and implement `optimizerGame`.
-- Add a simple database to save profiles and scores.
+Each game lives in its own folder under `gameModes/`. Multiplayer games expose a service module (`*-service.js`) that the main `server.js` imports. Single-player games are self-contained static pages with their own HTML, CSS, and JS.

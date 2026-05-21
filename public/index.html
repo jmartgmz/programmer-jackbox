@@ -1,716 +1,861 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Programmer Jackbox</title>
-  <link rel="stylesheet" href="style.css" />
-</head>
-<body>
-  <div class="app-shell">
-    <header class="app-header">
-      <div class="brand">
-        <img src="/ProgrammerJackBox-logo.png" alt="Programmer Jackbox" class="brand-logo" />
-        <div>
-          <div class="brand-title">Programmer Jackbox</div>
-          <div class="brand-subtitle">Party games for developers</div>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Programmer Jackbox</title>
+        <link rel="stylesheet" href="style.css" />
+    </head>
+    <body>
+        <div class="app">
+            <header class="app__header">
+                <div class="brand">
+                    <div>
+                        <div class="brand__title">Programmer Jackbox</div>
+                        <div class="brand__subtitle">Party games for developers</div>
+                    </div>
+                </div>
+                <nav class="app__nav">
+                    <button class="btn btn--nav" onclick="showMenu()">Home</button>
+                    <button class="btn btn--nav" onclick="showProfile()">Profile</button>
+                    <button class="btn btn--nav" onclick="showSettings()">Settings</button>
+                </nav>
+            </header>
+
+            <main class="app__main">
+                <section id="nameEntry" class="panel panel-hero">
+                    <div class="card card--landing">
+                        <div class="landing__copy">
+                            <span class="eyebrow">Join the table</span>
+                            <h1>Programmer Jackbox</h1>
+                            <p class="intro">Grab a handle, choose a game, and play with your friends in real time.</p>
+                        </div>
+                        <div class="landing__form">
+                            <label for="nameInput">Your handle</label>
+                            <div class="form__row">
+                                <input
+                                    id="nameInput"
+                                    type="text"
+                                    placeholder="e.g. devCat42"
+                                    maxlength="20"
+                                    autocomplete="off"
+                                />
+                                <button type="button" class="btn btn--icon" onclick="randomizeHandle()" title="Random handle"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20"/><path d="M16 8h.01M8 8h.01M8 16h.01M16 16h.01M12 12h.01"/></svg></button>
+                            </div>
+                            <p class="hint" id="lastNameHint" style="display: none">Last used: none yet</p>
+                            <button class="btn btn--primary" onclick="submitName()">Continue</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="menu" class="panel hidden">
+                    <div class="card card--hero">
+                        <div class="hero-header">
+                            <div>
+                                <span class="text--eyebrow">Big four</span>
+                                <h2>What do you want to do?</h2>
+                                <p class="text--hero">
+                                    Host a private room, jump into a public match, join with a code, or warm up with
+                                    solo games.
+                                </p>
+                            </div>
+                            <div id="rejoinBanner" class="banner banner--rejoin hidden" data-room="">
+                                <div>
+                                    <span>Back to your last room</span>
+                                    <small>From the last session</small>
+                                </div>
+                                <button class="btn btn--ghost" onclick="rejoinRoom()">Rejoin</button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid--tiles">
+                            <button class="tile tile--primary" onclick="hostPrivateLobby()">
+                                <span class="tile__icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="8"/><rect x="2" y="14" width="20" height="8"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg></span>
+                                <span class="tile__title">Host lobby</span>
+                                <span class="tile__copy">Private room with a share code</span>
+                            </button>
+                            <button class="tile tile--secondary" onclick="showRandomJoin()">
+                                <span class="tile__icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+                                <span class="tile__title">Quick play</span>
+                                <span class="tile__copy">Find a public match fast</span>
+                            </button>
+                            <button class="tile tile--secondary" onclick="showJoin()">
+                                <span class="tile__icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg></span>
+                                <span class="tile__title">Join by code</span>
+                                <span class="tile__copy">Enter a 6-character room</span>
+                            </button>
+                            <button class="tile tile--secondary" onclick="showSinglePlayer()">
+                                <span class="tile__icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></span>
+                                <span class="tile__title">Solo arcade</span>
+                                <span class="tile__copy">Practice games on your own</span>
+                            </button>
+                        </div>
+
+                        <div class="friends" style="display: none">
+                            <div class="friends__title">Friends online</div>
+                            <div class="friends__list">
+                                <span class="friends__item">AL</span>
+                                <span class="friends__item">JS</span>
+                                <span class="friends__item">KL</span>
+                                <span class="friends__item">+2</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="joinSection" class="panel hidden">
+                    <div class="card section-card">
+                        <div class="panel__header">
+                            <div>
+                                <span class="eyebrow">Private room</span>
+                                <h2>Join by code</h2>
+                                <p>Enter the six-character room code from your host.</p>
+                            </div>
+                            <button class="btn btn--ghost" onclick="showMenu()">Back</button>
+                        </div>
+
+                        <div class="form__grid">
+                            <input
+                                id="joinDigit1"
+                                maxlength="1"
+                                inputmode="latin"
+                                autocomplete="off"
+                                oninput="advanceJoinDigit(1)"
+                                onkeydown="handleJoinDigitKeydown(event, 1)"
+                            />
+                            <input
+                                id="joinDigit2"
+                                maxlength="1"
+                                inputmode="latin"
+                                autocomplete="off"
+                                oninput="advanceJoinDigit(2)"
+                                onkeydown="handleJoinDigitKeydown(event, 2)"
+                            />
+                            <input
+                                id="joinDigit3"
+                                maxlength="1"
+                                inputmode="latin"
+                                autocomplete="off"
+                                oninput="advanceJoinDigit(3)"
+                                onkeydown="handleJoinDigitKeydown(event, 3)"
+                            />
+                            <input
+                                id="joinDigit4"
+                                maxlength="1"
+                                inputmode="latin"
+                                autocomplete="off"
+                                oninput="advanceJoinDigit(4)"
+                                onkeydown="handleJoinDigitKeydown(event, 4)"
+                            />
+                            <input
+                                id="joinDigit5"
+                                maxlength="1"
+                                inputmode="latin"
+                                autocomplete="off"
+                                oninput="advanceJoinDigit(5)"
+                                onkeydown="handleJoinDigitKeydown(event, 5)"
+                            />
+                            <input
+                                id="joinDigit6"
+                                maxlength="1"
+                                inputmode="latin"
+                                autocomplete="off"
+                                oninput="advanceJoinDigit(6)"
+                                onkeydown="handleJoinDigitKeydown(event, 6)"
+                            />
+                        </div>
+                        <input id="joinCode" type="hidden" />
+
+                        <div class="join-actions">
+                            <button class="btn btn--primary" onclick="joinLobby()">Join room</button>
+                            <button class="btn btn--ghost" onclick="clearJoinCode()">Clear</button>
+                        </div>
+
+                        <div class="hint-group">
+                            <span class="eyebrow">Recent rooms</span>
+                            <div id="recentRoomsList" class="recent-rooms"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="randomJoinSection" class="panel hidden">
+                    <div class="card section-card">
+                        <div class="panel__header">
+                            <div>
+                                <span class="eyebrow">Public play</span>
+                                <h2>Join Random Public Lobby</h2>
+                                <p>Pick the games you want and the app will search for a match.</p>
+                            </div>
+                            <button class="btn btn--ghost" onclick="backToMenu()">Back</button>
+                        </div>
+                        <div id="randomGameChecklist" class="grid grid--checklist"></div>
+                        <div class="button-row">
+                            <button class="btn btn--primary" onclick="submitRandomJoinPreferences()">
+                                Find Public Lobby
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="singlePlayerSection" class="panel hidden">
+                    <div class="card section-card">
+                        <div class="panel__header">
+                            <div>
+                                <span class="eyebrow">Solo arcade</span>
+                                <h2>Practice games</h2>
+                                <p>Warm up in single-player experiences before joining friends.</p>
+                            </div>
+                            <button class="btn btn--ghost" onclick="backToMenu()">Back</button>
+                        </div>
+
+                        <div class="banner banner--daily">
+                            <div>
+                                <span class="eyebrow">Daily challenge</span>
+                                <h3>Flexbox Spider — beat 00:42</h3>
+                                <p>Your streak: <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;vertical-align:-0.15em;display:inline;color:var(--color-accent-red)" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg> 3 days · 142 players today</p>
+                            </div>
+                            <button class="btn btn--secondary">Play daily</button>
+                        </div>
+
+                        <div id="singlePlayerCards" class="game-mode-cards"></div>
+                    </div>
+                </section>
+
+                <section id="hostSection" class="panel hidden">
+                    <div class="card grid grid--lobby">
+                        <div class="lobby__aside">
+                            <div class="panel__header">
+                                <div>
+                                    <span class="eyebrow">Lobby</span>
+                                    <h2 id="lobbySectionTitle">Waiting room</h2>
+                                    <p>Lobby type: <strong id="lobbyTypeLabel">Private</strong></p>
+                                </div>
+                            </div>
+
+                            <div id="roomCodeArea" class="room-card">
+                                <div class="room-card__label">Share this code</div>
+                                <div class="room-card__code" id="roomKey">------</div>
+                                <div class="room-card__actions">
+                                    <button class="btn btn--secondary" onclick="copyRoomCode()">Copy code</button>
+                                    <button class="btn btn--secondary" onclick="copyRoomInvite()">Copy invite</button>
+                                </div>
+                            </div>
+
+                            <div class="card--players">
+                                <div class="card__header">
+                                    <span>Players</span>
+                                    <span class="text--player-count" id="gameHubPlayerCount">0 players</span>
+                                </div>
+                                <table id="playerTable" class="table--players">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+
+                            <p id="lobbyStatusMsg" class="status-message hidden"></p>
+
+                            <div class="action-group">
+                                <button
+                                    id="selectGameButton"
+                                    class="btn btn--primary hidden"
+                                    onclick="showGameSelect()"
+                                >
+                                    Select a Game
+                                </button>
+                                <button
+                                    id="terminateGameButton"
+                                    class="btn btn--ghost hidden"
+                                    onclick="terminateCurrentGame()"
+                                >
+                                    Terminate current game
+                                </button>
+                            </div>
+
+                            <p id="selectedGameDisplay" class="selected-game hidden"></p>
+                        </div>
+
+                        <div class="lobby__main">
+                            <div class="card--chat">
+                                <div class="card__header"><span>Lobby chat</span></div>
+                                <div class="chat__feed" id="lobbyChatFeed">
+                                    <div class="chat__empty">No messages yet.</div>
+                                </div>
+                                <div class="chat__actions">
+                                    <input
+                                        id="lobbyChatInput"
+                                        type="text"
+                                        placeholder="Write a message"
+                                        autocomplete="off"
+                                    />
+                                    <button class="btn btn--primary" onclick="sendLobbyChat()">Send</button>
+                                </div>
+                                <div class="chat__reactions">
+                                    <button onclick="emitLobbyReaction('👍')">👍</button>
+                                    <button onclick="emitLobbyReaction('🔥')">🔥</button>
+                                    <button onclick="emitLobbyReaction('😂')">😂</button>
+                                    <button onclick="emitLobbyReaction('🎉')">🎉</button>
+                                </div>
+                            </div>
+
+                            <div class="card--game-config">
+                                <div class="card__header"><span>Game config</span></div>
+                                <div id="gameSelectArea" class="hidden">
+                                    <label for="gameSelect">Game mode</label>
+                                    <select id="gameSelect"></select>
+                                    <button class="btn btn--secondary" onclick="confirmGameSelect()">
+                                        Confirm selection
+                                    </button>
+                                    <p id="gameDetails" class="text--detail-note"></p>
+                                </div>
+
+                                <div id="bugFixerArea" class="hidden bugfixer-panel">
+                                    <span class="eyebrow">Bug Fixer</span>
+                                    <p id="bugFixerStatus">Waiting to start.</p>
+                                    <div class="settings-group">
+                                        <label for="bugFixerPointsToWinInput">Points to win</label>
+                                        <input id="bugFixerPointsToWinInput" type="number" min="1" value="5" />
+                                        <label for="bugFixerSubmissionSecondsInput">Player submit timer</label>
+                                        <input id="bugFixerSubmissionSecondsInput" type="number" min="0" value="0" />
+                                        <label for="bugFixerDeciderSecondsInput">Decider timer</label>
+                                        <input id="bugFixerDeciderSecondsInput" type="number" min="0" value="0" />
+                                        <label for="bugFixerDeciderTimeoutAction">If decider times out</label>
+                                        <select id="bugFixerDeciderTimeoutAction">
+                                            <option value="no-point">No point awarded</option>
+                                            <option value="lowest-score">Award point to lowest score player</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        id="startBugFixerButton"
+                                        class="btn btn--secondary hidden"
+                                        onclick="startBugFixerGame()"
+                                    >
+                                        Start Bug Fixer
+                                    </button>
+                                    <div class="bugfixer__details">
+                                        <p><strong>Decider:</strong> <span id="bugFixerDecider">-</span></p>
+                                        <p><strong>Prompt:</strong> <span id="bugFixerPrompt">-</span></p>
+                                        <p>
+                                            <strong>Responses required:</strong>
+                                            <span id="bugFixerResponsesRequired">0</span>
+                                        </p>
+                                    </div>
+                                    <div class="bugfixer">
+                                        <div>
+                                            <h4>Your hand</h4>
+                                            <div id="bugFixerHand" class="card__panel"></div>
+                                        </div>
+                                        <div>
+                                            <h4>Selected order</h4>
+                                            <div id="bugFixerSelectedOrder" class="card__panel"></div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        id="bugFixerSubmitButton"
+                                        class="btn btn--primary hidden"
+                                        onclick="submitBugFixerCards()"
+                                    >
+                                        Submit selected card(s)
+                                    </button>
+                                    <div id="bugFixerJudgeArea" class="hidden judge-panel">
+                                        <h4>Choose a winner</h4>
+                                        <div id="bugFixerSubmissions"></div>
+                                    </div>
+                                    <div class="score-panel">
+                                        <h4>Scoreboard</h4>
+                                        <ul id="bugFixerScoreboard"></ul>
+                                    </div>
+                                    <div class="reveal-panel">
+                                        <h4>Last reveal</h4>
+                                        <ul id="bugFixerRevealList"></ul>
+                                    </div>
+                                </div>
+
+                                <div id="prophuntArea" class="hidden bugfixer-panel">
+                                    <span class="eyebrow">Programmer Prophunt</span>
+                                    <p id="prophuntStatus">Waiting to start.</p>
+                                    <div class="settings-group">
+                                        <label for="prophuntComplexityInput">Complexity</label>
+                                        <select id="prophuntComplexityInput">
+                                            <option value="easy">Easy</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="hard">Hard</option>
+                                        </select>
+                                        <label for="prophuntRoundSecondsInput">Round timer (seconds)</label>
+                                        <input id="prophuntRoundSecondsInput" type="number" min="5" value="45" />
+                                        <label for="prophuntRoundsInput">Rounds</label>
+                                        <input id="prophuntRoundsInput" type="number" min="1" value="3" />
+                                    </div>
+                                    <button
+                                        id="startProphuntButton"
+                                        class="btn btn--secondary hidden"
+                                        onclick="startProphuntGame()"
+                                    >
+                                        Start Programmer Prophunt
+                                    </button>
+
+                                    <div class="bugfixer__details">
+                                        <p><strong>Round:</strong> <span id="prophuntRoundDisplay">-</span></p>
+                                        <p><strong>Phase:</strong> <span id="prophuntPhaseDisplay">-</span></p>
+                                        <p>
+                                            <strong>Hiding Team:</strong> <span id="prophuntHidingTeamDisplay">-</span>
+                                        </p>
+                                        <p>
+                                            <strong>Finder Team:</strong> <span id="prophuntFinderTeamDisplay">-</span>
+                                        </p>
+                                    </div>
+
+                                    <div class="score-panel">
+                                        <h4>Teams</h4>
+                                        <p><strong>Team A:</strong> <span id="prophuntTeamAList">-</span></p>
+                                        <p><strong>Team B:</strong> <span id="prophuntTeamBList">-</span></p>
+                                    </div>
+
+                                    <div class="reveal-panel">
+                                        <h4>Code Block</h4>
+                                        <pre id="prophuntCodeBlock">No active round.</pre>
+                                    </div>
+
+                                    <div id="prophuntHiderControls" class="hidden judge-panel">
+                                        <h4>Hider Edit</h4>
+                                        <label for="prophuntLineSelect">Target line</label>
+                                        <select id="prophuntLineSelect"></select>
+                                        <label for="prophuntLineTextInput">Line content</label>
+                                        <input id="prophuntLineTextInput" type="text" placeholder="Write your line" />
+                                        <button
+                                            id="prophuntApplyEditButton"
+                                            class="btn btn--secondary"
+                                            onclick="applyProphuntEdit()"
+                                        >
+                                            Apply Edit
+                                        </button>
+                                        <button
+                                            id="prophuntConfirmHiderButton"
+                                            class="btn btn--primary"
+                                            onclick="confirmProphuntHiderEdit()"
+                                        >
+                                            Confirm My Line
+                                        </button>
+                                    </div>
+
+                                    <div id="prophuntFinderControls" class="hidden judge-panel">
+                                        <h4>Finder Guess</h4>
+                                        <label for="prophuntFinderLineSelect">Suspicious line</label>
+                                        <select id="prophuntFinderLineSelect"></select>
+                                        <button
+                                            id="prophuntFinderConfirmButton"
+                                            class="btn btn--primary"
+                                            onclick="confirmProphuntFinderGuess()"
+                                        >
+                                            Confirm Guess
+                                        </button>
+                                    </div>
+
+                                    <div class="score-panel">
+                                        <h4>Scoreboard</h4>
+                                        <ul id="prophuntScoreboard"></ul>
+                                    </div>
+
+                                    <div class="reveal-panel">
+                                        <h4>Last Round Result</h4>
+                                        <p id="prophuntLastResult">-</p>
+                                    </div>
+                                </div>
+
+                                <div id="codeTyperLobbyControls" class="hidden">
+                                    <div class="eyebrow">Code Typer Multiplayer</div>
+                                    <p>Race to type the snippet fastest.</p>
+                                    <button
+                                        id="startCodeTyperButton"
+                                        class="btn btn--secondary hidden"
+                                        onclick="startCodeTyperGame()"
+                                    >
+                                        Launch Game
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="gameHub" class="panel hidden">
+                    <div class="card section-card">
+                        <div class="panel__header">
+                            <div>
+                                <span class="eyebrow">Game picker</span>
+                                <h2>Choose a game</h2>
+                                <p id="gameHubPlayerCount">0 players in lobby</p>
+                            </div>
+                            <button class="btn btn--ghost" onclick="backToLobby()">Back to lobby</button>
+                        </div>
+                        <div class="grid grid--hub">
+                            <div id="gameModeCards" class="game-mode-cards"></div>
+                            <aside class="game-hub__detail">
+                                <div id="gameHubSettings" class="hidden game-settings"></div>
+                                <button
+                                    id="gameHubStartBtn"
+                                    class="btn btn--primary hidden"
+                                    onclick="launchSelectedGame()"
+                                >
+                                    Launch Game
+                                </button>
+                            </aside>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="gameHubWaiting" class="panel hidden">
+                    <div class="card section-card">
+                        <div class="panel__header">
+                            <div>
+                                <span class="eyebrow">Waiting</span>
+                                <h2>Waiting for host</h2>
+                                <p id="gameHubWaitingMsg">The host is selecting a game...</p>
+                            </div>
+                            <button class="btn btn--ghost" onclick="showMenu()">Home</button>
+                        </div>
+                        <div class="card--players">
+                            <div class="card__header"><span>Players in lobby</span></div>
+                            <table id="waitingPlayerTable" class="table--players">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="profileSection" class="panel hidden">
+                    <div class="card section-card">
+                        <div class="panel__header">
+                            <div>
+                                <span class="eyebrow">Profile</span>
+                                <h2>Player scrapbook</h2>
+                                <p>Track your experience, achievements, and favorites.</p>
+                            </div>
+                            <button class="btn btn--ghost" onclick="showMenu()">Back</button>
+                        </div>
+                        <div class="grid grid--profile">
+                            <div class="profile-pane">
+                                <h3>XP</h3>
+                                <div class="xp-bar">
+                                    <div class="xp-bar__fill" style="width: 64%"></div>
+                                </div>
+                                <p class="hint">Level 7 — 1,240 / 1,920 XP</p>
+                            </div>
+                            <div class="profile-pane">
+                                <h3>Streak</h3>
+                                <p class="text--big-number">3</p>
+                                <p class="hint">Days in a row completing a challenge</p>
+                            </div>
+                            <div class="profile-pane wide">
+                                <h3>Sticker collection</h3>
+                                <div class="grid grid--stickers">
+                                    <span class="sticker" title="Trophy"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="8 21 12 21 16 21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M7 4v9a5 5 0 0 0 10 0V4"/><path d="M7 4H4a1 1 0 0 0-1 1v2a4 4 0 0 0 4 4h.5"/><path d="M17 4h3a1 1 0 0 1 1 1v2a4 4 0 0 1-4 4h-.5"/><line x1="7" y1="4" x2="17" y2="4"/></svg></span>
+                                    <span class="sticker" title="Idea"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg></span>
+                                    <span class="sticker" title="Zap"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
+                                    <span class="sticker locked" title="Locked"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                                    <span class="sticker locked" title="Locked"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="settingsSection" class="panel hidden">
+                    <div class="card section-card">
+                        <div class="panel__header">
+                            <div>
+                                <span class="eyebrow">Settings</span>
+                                <h2>Customize your experience</h2>
+                                <p>Audio, display, and accessibility controls for your sessions.</p>
+                            </div>
+                            <button class="btn btn--ghost" onclick="showMenu()">Back</button>
+                        </div>
+                        <div class="grid grid--settings">
+                            <div class="settings-panel">
+                                <h3>Audio</h3>
+                                <label>Volume</label>
+                                <input type="range" min="0" max="100" value="72" />
+                                <label>Sound effects</label>
+                                <select>
+                                    <option>On</option>
+                                    <option>Off</option>
+                                </select>
+                            </div>
+                            <div class="settings-panel">
+                                <h3>Display</h3>
+                                <label>Theme</label>
+                                <select>
+                                    <option>Dark</option>
+                                    <option>Light</option>
+                                </select>
+                                <label>Font size</label>
+                                <input type="range" min="12" max="20" value="16" />
+                            </div>
+                            <div class="settings-panel wide">
+                                <h3>Accessibility</h3>
+                                <label>High contrast</label>
+                                <select>
+                                    <option>Off</option>
+                                    <option>On</option>
+                                </select>
+                                <label>Reduced motion</label>
+                                <select>
+                                    <option>Off</option>
+                                    <option>On</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div id="codeTyperArea" class="hidden code-typer-overlay">
+                    <div class="code-typer__toolbar">
+                        <button
+                            class="btn btn--ghost"
+                            onclick="document.getElementById('codeTyperArea').classList.add('hidden')"
+                        >
+                            Hide game
+                        </button>
+                    </div>
+                    <iframe id="codeTyperIframe" src="" class="code-typer__frame"></iframe>
+                </div>
+            </main>
         </div>
-      </div>
-      <nav class="top-links">
-        <button class="nav-btn" onclick="showMenu()">Home</button>
-        <button class="nav-btn" onclick="showProfile()">Profile</button>
-        <button class="nav-btn" onclick="showSettings()">Settings</button>
-      </nav>
-    </header>
 
-    <main class="app-main">
-      <section id="nameEntry" class="panel panel-hero">
-        <div class="panel-card landing-card">
-          <div class="landing-copy">
-            <span class="eyebrow">Join the table</span>
-            <h1>Programmer Jackbox</h1>
-            <p class="intro">Grab a handle, choose a game, and play with your friends in real time.</p>
-          </div>
-          <div class="landing-form">
-            <label for="nameInput">Your handle</label>
-            <div class="input-row">
-              <input id="nameInput" type="text" placeholder="e.g. devCat42" maxlength="20" autocomplete="off" />
-              <button type="button" class="icon-btn" onclick="randomizeHandle()">🎲</button>
-            </div>
-            <p class="hint" id="lastNameHint" style="display: none;">Last used: none yet</p>
-            <button class="primary-btn" onclick="submitName()">Continue</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="menu" class="panel hidden">
-        <div class="panel-card hero-menu">
-          <div class="hero-header">
-            <div>
-              <span class="eyebrow">Big four</span>
-              <h2>What do you want to do?</h2>
-              <p class="hero-text">Host a private room, jump into a public match, join with a code, or warm up with solo games.</p>
-            </div>
-            <div id="rejoinBanner" class="rejoin-banner hidden" data-room="">
-              <div>
-                <span>Back to your last room</span>
-                <small>From the last session</small>
-              </div>
-              <button class="ghost-btn" onclick="rejoinRoom()">Rejoin</button>
-            </div>
-          </div>
-
-          <div class="tile-grid">
-            <button class="tile primary-tile" onclick="hostPrivateLobby()">
-              <span class="tile-icon">🏠</span>
-              <span class="tile-title">Host lobby</span>
-              <span class="tile-copy">Private room with a share code</span>
-            </button>
-            <button class="tile secondary-tile" onclick="showRandomJoin()">
-              <span class="tile-icon">⚡</span>
-              <span class="tile-title">Quick play</span>
-              <span class="tile-copy">Find a public match fast</span>
-            </button>
-            <button class="tile secondary-tile" onclick="showJoin()">
-              <span class="tile-icon">🔑</span>
-              <span class="tile-title">Join by code</span>
-              <span class="tile-copy">Enter a 6-character room</span>
-            </button>
-            <button class="tile secondary-tile" onclick="showSinglePlayer()">
-              <span class="tile-icon">🎮</span>
-              <span class="tile-title">Solo arcade</span>
-              <span class="tile-copy">Practice games on your own</span>
-            </button>
-          </div>
-
-          <div class="friends-bar" style="display: none;">
-            <div class="friends-title">Friends online</div>
-            <div class="friends-list">
-              <span class="friend-pill">AL</span>
-              <span class="friend-pill">JS</span>
-              <span class="friend-pill">KL</span>
-              <span class="friend-pill">+2</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="joinSection" class="panel hidden">
-        <div class="panel-card section-card">
-          <div class="panel-header">
-            <div>
-              <span class="eyebrow">Private room</span>
-              <h2>Join by code</h2>
-              <p>Enter the six-character room code from your host.</p>
-            </div>
-            <button class="ghost-btn" onclick="showMenu()">Back</button>
-          </div>
-
-          <div class="join-code-grid">
-            <input id="joinDigit1" maxlength="1" inputmode="latin" autocomplete="off" oninput="advanceJoinDigit(1)" onkeydown="handleJoinDigitKeydown(event,1)" />
-            <input id="joinDigit2" maxlength="1" inputmode="latin" autocomplete="off" oninput="advanceJoinDigit(2)" onkeydown="handleJoinDigitKeydown(event,2)" />
-            <input id="joinDigit3" maxlength="1" inputmode="latin" autocomplete="off" oninput="advanceJoinDigit(3)" onkeydown="handleJoinDigitKeydown(event,3)" />
-            <input id="joinDigit4" maxlength="1" inputmode="latin" autocomplete="off" oninput="advanceJoinDigit(4)" onkeydown="handleJoinDigitKeydown(event,4)" />
-            <input id="joinDigit5" maxlength="1" inputmode="latin" autocomplete="off" oninput="advanceJoinDigit(5)" onkeydown="handleJoinDigitKeydown(event,5)" />
-            <input id="joinDigit6" maxlength="1" inputmode="latin" autocomplete="off" oninput="advanceJoinDigit(6)" onkeydown="handleJoinDigitKeydown(event,6)" />
-          </div>
-          <input id="joinCode" type="hidden" />
-
-          <div class="join-actions">
-            <button class="primary-btn" onclick="joinLobby()">Join room</button>
-            <button class="ghost-btn" onclick="clearJoinCode()">Clear</button>
-          </div>
-
-          <div class="hint-group">
-            <p class="hint">Recent rooms</p>
-            <div id="recentRoomsList" class="recent-list"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="randomJoinSection" class="panel hidden">
-        <div class="panel-card section-card">
-          <div class="panel-header">
-            <div>
-              <span class="eyebrow">Public play</span>
-              <h2>Join Random Public Lobby</h2>
-              <p>Pick the games you want and the app will search for a match.</p>
-            </div>
-            <button class="ghost-btn" onclick="backToMenu()">Back</button>
-          </div>
-          <div id="randomGameChecklist" class="checklist-grid"></div>
-          <div class="button-row">
-            <button class="primary-btn" onclick="submitRandomJoinPreferences()">Find Public Lobby</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="singlePlayerSection" class="panel hidden">
-        <div class="panel-card section-card">
-          <div class="panel-header">
-            <div>
-              <span class="eyebrow">Solo arcade</span>
-              <h2>Practice games</h2>
-              <p>Warm up in single-player experiences before joining friends.</p>
-            </div>
-            <button class="ghost-btn" onclick="backToMenu()">Back</button>
-          </div>
-
-          <div class="daily-banner">
-            <div>
-              <span class="eyebrow">Daily challenge</span>
-              <h3>Flexbox Spider — beat 00:42</h3>
-              <p>Your streak: 🔥 3 days · 142 players today</p>
-            </div>
-            <button class="secondary-btn">Play daily</button>
-          </div>
-
-          <div id="singlePlayerCards" class="game-mode-cards"></div>
-        </div>
-      </section>
-
-      <section id="hostSection" class="panel hidden">
-        <div class="panel-card lobby-grid">
-          <div class="lobby-aside">
-            <div class="panel-header">
-              <div>
-                <span class="eyebrow">Lobby</span>
-                <h2 id="lobbySectionTitle">Waiting room</h2>
-                <p>Lobby type: <strong id="lobbyTypeLabel">Private</strong></p>
-              </div>
-            </div>
-
-            <div id="roomCodeArea" class="room-card">
-              <div class="room-code-label">Share this code</div>
-              <div class="room-code" id="roomKey">------</div>
-              <div class="room-actions">
-                <button class="secondary-btn" onclick="copyRoomCode()">Copy code</button>
-                <button class="secondary-btn" onclick="copyRoomInvite()">Copy invite</button>
-              </div>
-            </div>
-
-            <div class="players-card">
-              <div class="card-header">
-                <span>Players</span>
-                <span class="player-count" id="gameHubPlayerCount">0 players</span>
-              </div>
-              <table id="playerTable" class="player-table">
-                <thead><tr><th>Name</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-
-            <p id="lobbyStatusMsg" class="status-message hidden"></p>
-
-            <div class="action-group">
-              <button id="selectGameButton" class="primary-btn hidden" onclick="showGameSelect()">Select a Game</button>
-              <button id="terminateGameButton" class="ghost-btn hidden" onclick="terminateCurrentGame()">Terminate current game</button>
-            </div>
-
-            <p id="selectedGameDisplay" class="selected-game hidden"></p>
-          </div>
-
-          <div class="lobby-main">
-            <div class="chat-card">
-              <div class="card-header"><span>Lobby chat</span></div>
-              <div class="chat-feed" id="lobbyChatFeed">
-                <div class="chat-empty">No messages yet.</div>
-              </div>
-              <div class="chat-actions">
-                <input id="lobbyChatInput" type="text" placeholder="Write a message" autocomplete="off" />
-                <button class="primary-btn" onclick="sendLobbyChat()">Send</button>
-              </div>
-              <div class="reaction-row">
-                <button onclick="emitLobbyReaction('👍')">👍</button>
-                <button onclick="emitLobbyReaction('🔥')">🔥</button>
-                <button onclick="emitLobbyReaction('😂')">😂</button>
-                <button onclick="emitLobbyReaction('🎉')">🎉</button>
-              </div>
-            </div>
-
-            <div class="game-config-card">
-              <div class="card-header"><span>Game config</span></div>
-              <div id="gameSelectArea" class="hidden">
-                <label for="gameSelect">Game mode</label>
-                <select id="gameSelect"></select>
-                <button class="secondary-btn" onclick="confirmGameSelect()">Confirm selection</button>
-                <p id="gameDetails" class="detail-note"></p>
-              </div>
-
-              <div id="bugFixerArea" class="hidden bugfixer-panel">
-                <span class="eyebrow">Bug Fixer</span>
-                <p id="bugFixerStatus">Waiting to start.</p>
-                <div class="settings-group">
-                  <label for="bugFixerPointsToWinInput">Points to win</label>
-                  <input id="bugFixerPointsToWinInput" type="number" min="1" value="5" />
-                  <label for="bugFixerSubmissionSecondsInput">Player submit timer</label>
-                  <input id="bugFixerSubmissionSecondsInput" type="number" min="0" value="0" />
-                  <label for="bugFixerDeciderSecondsInput">Decider timer</label>
-                  <input id="bugFixerDeciderSecondsInput" type="number" min="0" value="0" />
-                  <label for="bugFixerDeciderTimeoutAction">If decider times out</label>
-                  <select id="bugFixerDeciderTimeoutAction">
-                    <option value="no-point">No point awarded</option>
-                    <option value="lowest-score">Award point to lowest score player</option>
-                  </select>
-                </div>
-                <button id="startBugFixerButton" class="secondary-btn hidden" onclick="startBugFixerGame()">Start Bug Fixer</button>
-                <div class="bugfixer-details">
-                  <p><strong>Decider:</strong> <span id="bugFixerDecider">-</span></p>
-                  <p><strong>Prompt:</strong> <span id="bugFixerPrompt">-</span></p>
-                  <p><strong>Responses required:</strong> <span id="bugFixerResponsesRequired">0</span></p>
-                </div>
-                <div class="bugfixer-board">
-                  <div>
-                    <h4>Your hand</h4>
-                    <div id="bugFixerHand" class="card-panel"></div>
-                  </div>
-                  <div>
-                    <h4>Selected order</h4>
-                    <div id="bugFixerSelectedOrder" class="card-panel"></div>
-                  </div>
-                </div>
-                <button id="bugFixerSubmitButton" class="primary-btn hidden" onclick="submitBugFixerCards()">Submit selected card(s)</button>
-                <div id="bugFixerJudgeArea" class="hidden judge-panel">
-                  <h4>Choose a winner</h4>
-                  <div id="bugFixerSubmissions"></div>
-                </div>
-                <div class="score-panel">
-                  <h4>Scoreboard</h4>
-                  <ul id="bugFixerScoreboard"></ul>
-                </div>
-                <div class="reveal-panel">
-                  <h4>Last reveal</h4>
-                  <ul id="bugFixerRevealList"></ul>
-                </div>
-              </div>
-
-              <div id="prophuntArea" class="hidden bugfixer-panel">
-                <span class="eyebrow">Programmer Prophunt</span>
-                <p id="prophuntStatus">Waiting to start.</p>
-                <div class="settings-group">
-                  <label for="prophuntComplexityInput">Complexity</label>
-                  <select id="prophuntComplexityInput">
-                    <option value="easy">Easy</option>
-                    <option value="medium">Medium</option>
-                    <option value="hard">Hard</option>
-                  </select>
-                  <label for="prophuntRoundSecondsInput">Round timer (seconds)</label>
-                  <input id="prophuntRoundSecondsInput" type="number" min="5" value="45" />
-                  <label for="prophuntRoundsInput">Rounds</label>
-                  <input id="prophuntRoundsInput" type="number" min="1" value="3" />
-                </div>
-                <button id="startProphuntButton" class="secondary-btn hidden" onclick="startProphuntGame()">Start Programmer Prophunt</button>
-
-                <div class="bugfixer-details">
-                  <p><strong>Round:</strong> <span id="prophuntRoundDisplay">-</span></p>
-                  <p><strong>Phase:</strong> <span id="prophuntPhaseDisplay">-</span></p>
-                  <p><strong>Hiding Team:</strong> <span id="prophuntHidingTeamDisplay">-</span></p>
-                  <p><strong>Finder Team:</strong> <span id="prophuntFinderTeamDisplay">-</span></p>
-                </div>
-
-                <div class="score-panel">
-                  <h4>Teams</h4>
-                  <p><strong>Team A:</strong> <span id="prophuntTeamAList">-</span></p>
-                  <p><strong>Team B:</strong> <span id="prophuntTeamBList">-</span></p>
-                </div>
-
-                <div class="reveal-panel">
-                  <h4>Code Block</h4>
-                  <pre id="prophuntCodeBlock">No active round.</pre>
-                </div>
-
-                <div id="prophuntHiderControls" class="hidden judge-panel">
-                  <h4>Hider Edit</h4>
-                  <label for="prophuntLineSelect">Target line</label>
-                  <select id="prophuntLineSelect"></select>
-                  <label for="prophuntLineTextInput">Line content</label>
-                  <input id="prophuntLineTextInput" type="text" placeholder="Write your line" />
-                  <button id="prophuntApplyEditButton" class="secondary-btn" onclick="applyProphuntEdit()">Apply Edit</button>
-                  <button id="prophuntConfirmHiderButton" class="primary-btn" onclick="confirmProphuntHiderEdit()">Confirm My Line</button>
-                </div>
-
-                <div id="prophuntFinderControls" class="hidden judge-panel">
-                  <h4>Finder Guess</h4>
-                  <label for="prophuntFinderLineSelect">Suspicious line</label>
-                  <select id="prophuntFinderLineSelect"></select>
-                  <button id="prophuntFinderConfirmButton" class="primary-btn" onclick="confirmProphuntFinderGuess()">Confirm Guess</button>
-                </div>
-
-                <div class="score-panel">
-                  <h4>Scoreboard</h4>
-                  <ul id="prophuntScoreboard"></ul>
-                </div>
-
-                <div class="reveal-panel">
-                  <h4>Last Round Result</h4>
-                  <p id="prophuntLastResult">-</p>
-                </div>
-              </div>
-
-              <div id="codeTyperLobbyControls" class="hidden">
-                <div class="eyebrow">Code Typer Multiplayer</div>
-                <p>Race to type the snippet fastest.</p>
-                <button id="startCodeTyperButton" class="secondary-btn hidden" onclick="startCodeTyperGame()">Launch Game</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="gameHub" class="panel hidden">
-        <div class="panel-card section-card">
-          <div class="panel-header">
-            <div>
-              <span class="eyebrow">Game picker</span>
-              <h2>Choose a game</h2>
-              <p id="gameHubPlayerCount">0 players in lobby</p>
-            </div>
-            <button class="ghost-btn" onclick="backToLobby()">Back to lobby</button>
-          </div>
-          <div class="game-hub-grid">
-            <div id="gameModeCards" class="game-mode-cards"></div>
-            <aside class="game-hub-detail">
-              <div id="gameHubSettings" class="hidden game-settings"></div>
-              <button id="gameHubStartBtn" class="primary-btn hidden" onclick="launchSelectedGame()">Launch Game</button>
-            </aside>
-          </div>
-        </div>
-      </section>
-
-      <section id="gameHubWaiting" class="panel hidden">
-        <div class="panel-card section-card">
-          <div class="panel-header">
-            <div>
-              <span class="eyebrow">Waiting</span>
-              <h2>Waiting for host</h2>
-              <p id="gameHubWaitingMsg">The host is selecting a game...</p>
-            </div>
-            <button class="ghost-btn" onclick="showMenu()">Home</button>
-          </div>
-          <div class="players-card">
-            <div class="card-header"><span>Players in lobby</span></div>
-            <table id="waitingPlayerTable" class="player-table">
-              <thead><tr><th>Name</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section id="profileSection" class="panel hidden">
-        <div class="panel-card section-card">
-          <div class="panel-header">
-            <div>
-              <span class="eyebrow">Profile</span>
-              <h2>Player scrapbook</h2>
-              <p>Track your experience, achievements, and favorites.</p>
-            </div>
-            <button class="ghost-btn" onclick="showMenu()">Back</button>
-          </div>
-          <div class="profile-grid">
-            <div class="profile-pane">
-              <h3>XP</h3>
-              <div class="xp-bar">
-                <div class="xp-fill" style="width: 64%"></div>
-              </div>
-              <p class="hint">Level 7 — 1,240 / 1,920 XP</p>
-            </div>
-            <div class="profile-pane">
-              <h3>Streak</h3>
-              <p class="big-number">3</p>
-              <p class="hint">Days in a row completing a challenge</p>
-            </div>
-            <div class="profile-pane wide">
-              <h3>Sticker collection</h3>
-              <div class="sticker-grid">
-                <span class="sticker">🏆</span>
-                <span class="sticker">💡</span>
-                <span class="sticker">⚡</span>
-                <span class="sticker locked">?</span>
-                <span class="sticker locked">?</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="settingsSection" class="panel hidden">
-        <div class="panel-card section-card">
-          <div class="panel-header">
-            <div>
-              <span class="eyebrow">Settings</span>
-              <h2>Customize your experience</h2>
-              <p>Audio, display, and accessibility controls for your sessions.</p>
-            </div>
-            <button class="ghost-btn" onclick="showMenu()">Back</button>
-          </div>
-          <div class="settings-grid">
-            <div class="settings-panel">
-              <h3>Audio</h3>
-              <label>Volume</label>
-              <input type="range" min="0" max="100" value="72" />
-              <label>Sound effects</label>
-              <select>
-                <option>On</option>
-                <option>Off</option>
-              </select>
-            </div>
-            <div class="settings-panel">
-              <h3>Display</h3>
-              <label>Theme</label>
-              <select>
-                <option>Dark</option>
-                <option>Light</option>
-              </select>
-              <label>Font size</label>
-              <input type="range" min="12" max="20" value="16" />
-            </div>
-            <div class="settings-panel wide">
-              <h3>Accessibility</h3>
-              <label>High contrast</label>
-              <select>
-                <option>Off</option>
-                <option>On</option>
-              </select>
-              <label>Reduced motion</label>
-              <select>
-                <option>Off</option>
-                <option>On</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <div id="codeTyperArea" class="hidden code-typer-overlay">
-        <div class="code-typer-toolbar">
-          <button class="ghost-btn" onclick="document.getElementById('codeTyperArea').classList.add('hidden')">Hide game</button>
-        </div>
-        <iframe id="codeTyperIframe" src="" class="code-typer-frame"></iframe>
-      </div>
-    </main>
-  </div>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js"></script>
-  <script>
-    const randomHandles = [
-      "devCat42",
-      "sudoCorgi",
-      "byteNinja",
-      "loopGuru",
-      "stackSage",
-      "nullPointer",
-      "gitWiz",
-      "pixelPirate"
-    ];
-
-    function randomizeHandle() {
-      const input = document.getElementById("nameInput");
-      const next = randomHandles[Math.floor(Math.random() * randomHandles.length)];
-      if (input) input.value = next;
-    }
-
-    function showSection(sectionId) {
-      [
-        "nameEntry",
-        "menu",
-        "joinSection",
-        "randomJoinSection",
-        "singlePlayerSection",
-        "hostSection",
-        "gameHub",
-        "gameHubWaiting",
-        "profileSection",
-        "settingsSection",
-        "codeTyperArea"
-      ].forEach((id) => {
-        const section = document.getElementById(id);
-        if (section) {
-          section.classList.toggle("hidden", id !== sectionId);
-        }
-      });
-    }
-
-    function showMenu() {
-      showSection("menu");
-    }
-
-    function showProfile() {
-      showSection("profileSection");
-    }
-
-    function showSettings() {
-      showSection("settingsSection");
-    }
-
-    function setLastNameHint(name) {
-      const hint = document.getElementById("lastNameHint");
-      if (hint) {
-        hint.textContent = `Last used: ${name}`;
-      }
-    }
-
-    function advanceJoinDigit(index) {
-      const input = document.getElementById(`joinDigit${index}`);
-      if (!input) return;
-      input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-      updateJoinHiddenCode();
-      if (input.value && index < 6) {
-        const next = document.getElementById(`joinDigit${index + 1}`);
-        next?.focus();
-      }
-    }
-
-    function handleJoinDigitKeydown(event, index) {
-      const key = event.key;
-      const input = document.getElementById(`joinDigit${index}`);
-      if (!input) return;
-      if (key === "Backspace" && !input.value && index > 1) {
-        const prev = document.getElementById(`joinDigit${index - 1}`);
-        prev?.focus();
-      }
-      if (key === "Enter") {
-        joinLobby();
-      }
-    }
-
-    function updateJoinHiddenCode() {
-      const code = Array.from({ length: 6 }, (_, i) => {
-        const digit = document.getElementById(`joinDigit${i + 1}`);
-        return digit ? digit.value.toUpperCase() : "";
-      }).join("");
-      const hidden = document.getElementById("joinCode");
-      if (hidden) hidden.value = code;
-    }
-
-    function clearJoinCode() {
-      Array.from({ length: 6 }, (_, i) => document.getElementById(`joinDigit${i + 1}`)).forEach((input) => {
-        if (input) input.value = "";
-      });
-      updateJoinHiddenCode();
-      document.getElementById("joinDigit1")?.focus();
-    }
-
-    function fillJoinCode(code) {
-      const normalized = code.toUpperCase().padEnd(6, " ");
-      normalized.split("").slice(0, 6).forEach((char, idx) => {
-        const input = document.getElementById(`joinDigit${idx + 1}`);
-        if (input) input.value = char === " " ? "" : char;
-      });
-      updateJoinHiddenCode();
-      document.getElementById("joinDigit6")?.focus();
-    }
-
-    function rejoinRoom() {
-      const banner = document.getElementById("rejoinBanner");
-      const code = banner?.dataset?.room;
-      if (code) {
-        fillJoinCode(code);
-        showJoin();
-      }
-    }
-
-    function copyRoomCode() {
-      const code = document.getElementById("roomKey")?.innerText || "------";
-      if (code === "------") return;
-      navigator.clipboard.writeText(code).catch(() => {});
-    }
-
-    function copyRoomInvite() {
-      const code = document.getElementById("roomKey")?.innerText || "------";
-      if (code === "------") return;
-      const inviteText = `Join my Programmer Jackbox lobby with code: ${code}`;
-      navigator.clipboard.writeText(inviteText).catch(() => {});
-    }
-
-    function renderRecentRooms() {
-      const recentRooms = JSON.parse(localStorage.getItem("pjboxRecentRooms") || "[]");
-      const recentList = document.getElementById("recentRoomsList");
-      if (!recentList) return;
-      recentList.innerHTML = recentRooms
-        .map((room) => `<button type="button" class="recent-room" onclick="fillJoinCode('${room}')">${room}</button>`)
-        .join("");
-      const banner = document.getElementById("rejoinBanner");
-      if (banner) {
-        if (recentRooms.length > 0) {
-          banner.classList.remove("hidden");
-          banner.dataset.room = recentRooms[0];
-        } else {
-          banner.classList.add("hidden");
-        }
-      }
-    }
-
-    function restoreLastHandle() {
-      const savedName = localStorage.getItem("pjboxPlayerName");
-      if (savedName) {
-        const input = document.getElementById("nameInput");
-        if (input) input.value = savedName;
-        setLastNameHint(savedName);
-      }
-    }
-
-    function sendLobbyChat() {
-      const input = document.getElementById("lobbyChatInput");
-      if (!input || !input.value.trim()) return;
-
-      const playerName_val = playerName || document.getElementById("nameInput")?.value || "Player";
-      const message = input.value.trim();
-
-      addChatMessage(playerName_val, message, true);
-
-      if (socket && socket.emit) {
-        socket.emit("lobby-chat", {
-          roomCode: currentRoomCode,
-          name: playerName_val,
-          message: message,
-        });
-      }
-
-      input.value = "";
-    }
-
-    function addChatMessage(name, message, isSelf) {
-      const feed = document.getElementById("lobbyChatFeed");
-      if (!feed) return;
-
-      if (feed.querySelector(".chat-empty")) {
-        feed.innerHTML = "";
-      }
-
-      const msgEl = document.createElement("div");
-      msgEl.style.cssText = "padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);";
-      msgEl.innerHTML = `<div style="font-size: 0.9rem;"><strong style="color: ${isSelf ? "#a78bfa" : "#d8b4fe"}">${name}</strong><br/><span style="color: var(--muted);">${message}</span></div>`;
-      feed.appendChild(msgEl);
-      feed.scrollTop = feed.scrollHeight;
-    }
-
-    function emitLobbyReaction(emoji) {
-      if (socket && socket.emit) {
-        socket.emit("lobby-reaction", {
-          roomCode: currentRoomCode,
-          name: playerName || document.getElementById("nameInput")?.value || "Player",
-          emoji: emoji,
-        });
-      }
-    }
-
-    if (socket && socket.on) {
-      socket.on("lobby-chat", ({ name, message }) => {
-        addChatMessage(name, message, false);
-      });
-
-      socket.on("lobby-reaction", ({ name, emoji }) => {
-        addChatMessage(name, emoji, false);
-      });
-    }
-
-    document.addEventListener("DOMContentLoaded", () => {
-      restoreLastHandle();
-      renderRecentRooms();
-      document.getElementById("joinDigit1")?.focus();
-    });
-  </script>
-</body>
+        <script src="/socket.io/socket.io.js"></script>
+        <script src="client.js"></script>
+        <script>
+            const randomHandles = [
+                "devCat42",
+                "sudoCorgi",
+                "byteNinja",
+                "loopGuru",
+                "stackSage",
+                "nullPointer",
+                "gitWiz",
+                "pixelPirate",
+            ];
+
+            function randomizeHandle() {
+                const input = document.getElementById("nameInput");
+                const next = randomHandles[Math.floor(Math.random() * randomHandles.length)];
+                if (input) input.value = next;
+            }
+
+            function showSection(sectionId) {
+                [
+                    "nameEntry",
+                    "menu",
+                    "joinSection",
+                    "randomJoinSection",
+                    "singlePlayerSection",
+                    "hostSection",
+                    "gameHub",
+                    "gameHubWaiting",
+                    "profileSection",
+                    "settingsSection",
+                    "codeTyperArea",
+                ].forEach((id) => {
+                    const section = document.getElementById(id);
+                    if (section) {
+                        section.classList.toggle("hidden", id !== sectionId);
+                    }
+                });
+            }
+
+            function showMenu() {
+                showSection("menu");
+            }
+
+            function showProfile() {
+                showSection("profileSection");
+            }
+
+            function showSettings() {
+                showSection("settingsSection");
+            }
+
+            function setLastNameHint(name) {
+                const hint = document.getElementById("lastNameHint");
+                if (hint) {
+                    hint.textContent = `Last used: ${name}`;
+                }
+            }
+
+            function advanceJoinDigit(index) {
+                const input = document.getElementById(`joinDigit${index}`);
+                if (!input) return;
+                input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                updateJoinHiddenCode();
+                if (input.value && index < 6) {
+                    const next = document.getElementById(`joinDigit${index + 1}`);
+                    next?.focus();
+                }
+            }
+
+            function handleJoinDigitKeydown(event, index) {
+                const key = event.key;
+                const input = document.getElementById(`joinDigit${index}`);
+                if (!input) return;
+                if (key === "Backspace" && !input.value && index > 1) {
+                    const prev = document.getElementById(`joinDigit${index - 1}`);
+                    prev?.focus();
+                }
+                if (key === "Enter") {
+                    joinLobby();
+                }
+            }
+
+            function updateJoinHiddenCode() {
+                const code = Array.from({ length: 6 }, (_, i) => {
+                    const digit = document.getElementById(`joinDigit${i + 1}`);
+                    return digit ? digit.value.toUpperCase() : "";
+                }).join("");
+                const hidden = document.getElementById("joinCode");
+                if (hidden) hidden.value = code;
+            }
+
+            function clearJoinCode() {
+                Array.from({ length: 6 }, (_, i) => document.getElementById(`joinDigit${i + 1}`)).forEach((input) => {
+                    if (input) input.value = "";
+                });
+                updateJoinHiddenCode();
+                document.getElementById("joinDigit1")?.focus();
+            }
+
+            function fillJoinCode(code) {
+                const normalized = code.toUpperCase().padEnd(6, " ");
+                normalized
+                    .split("")
+                    .slice(0, 6)
+                    .forEach((char, idx) => {
+                        const input = document.getElementById(`joinDigit${idx + 1}`);
+                        if (input) input.value = char === " " ? "" : char;
+                    });
+                updateJoinHiddenCode();
+                document.getElementById("joinDigit6")?.focus();
+            }
+
+            function rejoinRoom() {
+                const banner = document.getElementById("rejoinBanner");
+                const code = banner?.dataset?.room;
+                if (code) {
+                    fillJoinCode(code);
+                    showJoin();
+                }
+            }
+
+            function copyRoomCode() {
+                const code = document.getElementById("roomKey")?.innerText || "------";
+                if (code === "------") return;
+                navigator.clipboard.writeText(code).catch(() => {});
+            }
+
+            function copyRoomInvite() {
+                const code = document.getElementById("roomKey")?.innerText || "------";
+                if (code === "------") return;
+                const inviteText = `Join my Programmer Jackbox lobby with code: ${code}`;
+                navigator.clipboard.writeText(inviteText).catch(() => {});
+            }
+
+            function renderRecentRooms() {
+                const recentRooms = JSON.parse(localStorage.getItem("pjboxRecentRooms") || "[]");
+                const recentList = document.getElementById("recentRoomsList");
+                if (!recentList) return;
+                recentList.innerHTML = recentRooms
+                    .map(
+                        (room) =>
+                            `<button type="button" class="recent-rooms__item" onclick="fillJoinCode('${room}')">${room}</button>`
+                    )
+                    .join("");
+                const banner = document.getElementById("rejoinBanner");
+                if (banner) {
+                    if (recentRooms.length > 0) {
+                        banner.classList.remove("hidden");
+                        banner.dataset.room = recentRooms[0];
+                    } else {
+                        banner.classList.add("hidden");
+                    }
+                }
+            }
+
+            function restoreLastHandle() {
+                const savedName = localStorage.getItem("pjboxPlayerName");
+                if (savedName) {
+                    const input = document.getElementById("nameInput");
+                    if (input) input.value = savedName;
+                    setLastNameHint(savedName);
+                }
+            }
+
+            function sendLobbyChat() {
+                const input = document.getElementById("lobbyChatInput");
+                if (!input || !input.value.trim()) return;
+
+                const playerName_val = playerName || document.getElementById("nameInput")?.value || "Player";
+                const message = input.value.trim();
+
+                addChatMessage(playerName_val, message, true);
+
+                if (socket && socket.emit) {
+                    socket.emit("lobby-chat", {
+                        roomCode: currentRoomCode,
+                        name: playerName_val,
+                        message: message,
+                    });
+                }
+
+                input.value = "";
+            }
+
+            function addChatMessage(name, message, isSelf) {
+                const feed = document.getElementById("lobbyChatFeed");
+                if (!feed) return;
+
+                if (feed.querySelector(".chat-empty")) {
+                    feed.innerHTML = "";
+                }
+
+                const msgEl = document.createElement("div");
+                msgEl.style.cssText = "padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06);";
+                msgEl.innerHTML = `<div style="font-size: 0.9rem;"><strong style="color: ${isSelf ? "#a78bfa" : "#d8b4fe"}">${name}</strong><br/><span style="color: var(--muted);">${message}</span></div>`;
+                feed.appendChild(msgEl);
+                feed.scrollTop = feed.scrollHeight;
+            }
+
+            function emitLobbyReaction(emoji) {
+                if (socket && socket.emit) {
+                    socket.emit("lobby-reaction", {
+                        roomCode: currentRoomCode,
+                        name: playerName || document.getElementById("nameInput")?.value || "Player",
+                        emoji: emoji,
+                    });
+                }
+            }
+
+            if (socket && socket.on) {
+                socket.on("lobby-chat", ({ name, message }) => {
+                    addChatMessage(name, message, false);
+                });
+
+                socket.on("lobby-reaction", ({ name, emoji }) => {
+                    addChatMessage(name, emoji, false);
+                });
+            }
+
+            document.addEventListener("DOMContentLoaded", () => {
+                restoreLastHandle();
+                renderRecentRooms();
+                document.getElementById("joinDigit1")?.focus();
+            });
+        </script>
+    </body>
 </html>

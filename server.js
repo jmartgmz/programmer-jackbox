@@ -1,1351 +1,97 @@
-// server.js
+/**
+ * @file server.js
+ * @description Application entry point. Configures Express static routes, initialises
+ * Socket.IO, wires up all socket event handlers, and starts the HTTP server.
+ *
+ * Game-specific logic lives in each game mode's service module:
+ *   - gameModes/bug-fixer/bug-fixer-service.js
+ *   - gameModes/programmer-prophunt/prophunt-service.js
+ *
+ * Shared infrastructure lives in src/:
+ *   - src/constants.js
+ *   - src/utils.js
+ *   - src/room-manager.js
+ */
+
+"use strict";
+
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const LogicCAH = require("./gameModes/LogicCAH/LogicCAH.js");
-const ProgrammerProphunt = require("./gameModes/programmerProphunt/ProgrammerProphunt.js");
-const fs = require("fs");
-const path = require("path");
+const LogicCAH = require("./gameModes/logic-cah/logic-cah.js");
+const ProgrammerProphunt = require("./gameModes/programmer-prophunt/programmer-prophunt.js");
+
+const { createBugFixerService } = require("./gameModes/bug-fixer/bug-fixer-service.js");
+const { createProphuntService } = require("./gameModes/programmer-prophunt/prophunt-service.js");
+
+const {
+    rooms,
+    loadGameModes,
+    createRoom,
+    touchRoom,
+    touchRoomByCode,
+    clearAllBugFixerTimers,
+    clearProphuntTimers,
+    emitRoomUpdate,
+    removeSocketFromRooms,
+    runRoomJanitor,
+    getPreferredGameModes,
+    findAvailablePublicRoomsByGames,
+} = require("./src/room-manager.js");
+
+const { normalizeName, randomItem } = require("./src/utils.js");
+const constants = require("./src/constants.js");
+const { ROOM_JANITOR_INTERVAL_MS } = constants;
+
+// ─── Express & Socket.IO Setup ───────────────────────────────────────────────
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-//for cah rejoin
-const ROOM_REJOIN_GRACE_MS = 5000;
-
+// Static file routes — each game mode serves its own directory.
 app.use(express.static("public"));
-app.use("/codeTyper", express.static("gameModes/codeTyper"));
-app.use("/codeTyperMultiplayer", express.static("gameModes/codeTyperMultiplayer"));
-app.use("/flexboxSpider", express.static("gameModes/flexboxSpider"));
-app.use("/escapeTheLoop", express.static("gameModes/escapeTheLoop"));
-app.use("/logicCAH", express.static("gameModes/LogicCAH"));
+app.use("/code-typer", express.static("gameModes/code-typer"));
+app.use("/code-typer-multiplayer", express.static("gameModes/code-typer-multiplayer"));
+app.use("/flexbox-spider", express.static("gameModes/flexbox-spider"));
+app.use("/escape-the-loop", express.static("gameModes/escape-the-loop"));
+app.use("/logic-cah", express.static("gameModes/logic-cah"));
 
-const BUG_FIXER_MIN_PLAYERS = 3;
-const BUG_FIXER_HAND_SIZE = 5;
-const BUG_FIXER_FINALIZE_DELAY_MS = 10000;
-const PROPHUNT_MIN_PLAYERS = 4;
-const ROOM_IDLE_TTL_MS = 30 * 60 * 1000;
-const ROOM_SOFT_CLEANUP_TTL_MS = 10 * 60 * 1000;
-const ROOM_JANITOR_INTERVAL_MS = 60 * 1000;
-const CLEANUP_ARCHIVE_LIMIT = 200;
+// ─── Game Services ────────────────────────────────────────────────────────────
 
-const PROPHUNT_SNIPPETS = {
-    easy: [
-        [
-            "function sum(nums) {",
-            "  let total = 0;",
-            "  for (const n of nums) {",
-            "    total += n;",
-            "  }",
-            "  return total;",
-            "}"
-        ],
-        [
-            "function greet(name) {",
-            "  if (!name) return \"Hello\";",
-            "  return `Hello, ${name}`;",
-            "}"
-        ]
-    ],
-    medium: [
-        [
-            "function formatUsers(users) {",
-            "  return users",
-            "    .filter(user => user.active)",
-            "    .map(user => ({",
-            "      id: user.id,",
-            "      tag: `${user.first}.${user.last}`.toLowerCase()",
-            "    }));",
-            "}"
-        ],
-        [
-            "function buildReport(rows) {",
-            "  const grouped = {};",
-            "  for (const row of rows) {",
-            "    grouped[row.type] = (grouped[row.type] || 0) + row.value;",
-            "  }",
-            "  return Object.entries(grouped).sort((a, b) => b[1] - a[1]);",
-            "}"
-        ]
-    ],
-    hard: [
-        [
-            "async function loadDashboard(client) {",
-            "  const [projects, users] = await Promise.all([",
-            "    client.getProjects(),",
-            "    client.getUsers()",
-            "  ]);",
-            "",
-            "  const userById = new Map(users.map(u => [u.id, u]));",
-            "  return projects.map(project => ({",
-            "    id: project.id,",
-            "    owner: userById.get(project.ownerId)?.name || \"unknown\",",
-            "    openIssues: project.issues.filter(issue => !issue.closed).length",
-            "  }));",
-            "}"
-        ],
-        [
-            "function tokenize(source) {",
-            "  const tokens = [];",
-            "  let current = \"\";",
-            "",
-            "  for (const ch of source) {",
-            "    if (/\\s/.test(ch)) {",
-            "      if (current) tokens.push(current);",
-            "      current = \"\";",
-            "      continue;",
-            "    }",
-            "    current += ch;",
-            "  }",
-            "",
-            "  if (current) tokens.push(current);",
-            "  return tokens;",
-            "}"
-        ]
-    ]
-};
+/** @type {ReturnType<createBugFixerService>} */
+const bugFixerService = createBugFixerService(io, rooms);
 
-function normalizeName(name) {
-    return String(name || "")
-        .trim()
-        .toLowerCase();
-}
+/** @type {ReturnType<createProphuntService>} */
+const prophuntService = createProphuntService(io, rooms);
 
-function loadBugFixerData() {
-    const gameDir = path.join(__dirname, "gameModes", "bugFixerGame");
-    const promptsPath = path.join(gameDir, "bugPrompts.json");
-    const solutionsPath = path.join(gameDir, "solutionCards.json");
+// ─── Game Mode Registry ───────────────────────────────────────────────────────
 
-    let prompts = [];
-    let solutions = [];
-
-    try {
-        prompts = JSON.parse(fs.readFileSync(promptsPath, "utf8"));
-    } catch {
-        prompts = [];
-    }
-
-    try {
-        solutions = JSON.parse(fs.readFileSync(solutionsPath, "utf8"));
-    } catch {
-        solutions = [];
-    }
-
-    return {
-        prompts: Array.isArray(prompts) ? prompts : [],
-        solutions: Array.isArray(solutions) ? solutions : [],
-    };
-}
-
-const bugFixerData = loadBugFixerData();
-
-function loadGameModes() {
-    const gameModesPath = path.join(__dirname, "public", "gamemodes.json");
-    try {
-        const raw = JSON.parse(fs.readFileSync(gameModesPath, "utf8"));
-        return Array.isArray(raw) ? raw : [];
-    } catch {
-        return [];
-    }
-}
-
-const gameModesData = loadGameModes();
+const gameModesData = loadGameModes(__dirname);
 const validGameModeNames = new Set(gameModesData.map((entry) => entry && entry.name).filter(Boolean));
 
-const rooms = {}; // { ROOMCODE: { host, players, selectedGame, visibility, bugFixer } }
-const cleanupArchive = [];
-
-function appendCleanupArchive(entry) {
-    cleanupArchive.push({ ...entry, at: Date.now() });
-    if (cleanupArchive.length > CLEANUP_ARCHIVE_LIMIT) {
-        cleanupArchive.splice(0, cleanupArchive.length - CLEANUP_ARCHIVE_LIMIT);
-    }
-}
-
-function clearRoomTimers(room) {
-    if (!room) {
-        return;
-    }
-    if (room.bugFixer) {
-        clearAllBugFixerTimers(room.bugFixer);
-    }
-    if (room.prophunt) {
-        clearProphuntTimers(room.prophunt);
-    }
-}
-
-function touchRoom(room, reason = "activity") {
-    if (!room) {
-        return;
-    }
-    room.lastActivityAt = Date.now();
-    room.lastActivityReason = reason;
-}
-
-function touchRoomByCode(roomCode, reason = "activity") {
-    const room = rooms[roomCode];
-    if (!room) {
-        return;
-    }
-    touchRoom(room, reason);
-}
-
-function isRoomGameActive(room) {
-    if (!room) {
-        return false;
-    }
-    if (room.bugFixer && room.bugFixer.active) {
-        return true;
-    }
-    if (room.prophunt && room.prophunt.active) {
-        return true;
-    }
-    if (room.gameState === "PLAYING") {
-        return true;
-    }
-    return false;
-}
-
-function pruneRoomTransientData(roomCode) {
-    const room = rooms[roomCode];
-    if (!room) {
-        return;
-    }
-
-    const validPlayerIds = new Set((room.players || []).map((player) => player.id));
-
-    if (room.codeTyperMultiplayer && room.codeTyperMultiplayer.players) {
-        Object.keys(room.codeTyperMultiplayer.players).forEach((id) => {
-            if (!validPlayerIds.has(id)) {
-                delete room.codeTyperMultiplayer.players[id];
-            }
-        });
-
-        if (Object.keys(room.codeTyperMultiplayer.players).length === 0) {
-            delete room.codeTyperMultiplayer;
-            appendCleanupArchive({ roomCode, action: "pruned-codetyper-cache" });
-        }
-    }
-
-    const idleMs = Date.now() - (room.lastActivityAt || Date.now());
-    if (idleMs >= ROOM_SOFT_CLEANUP_TTL_MS && !isRoomGameActive(room)) {
-        if (room.gameState === "LOBBY" || !room.selectedGame) {
-            room.game = null;
-            room.gameMode = null;
-            if (!room.selectedGame) {
-                room.bugFixer = null;
-                room.prophunt = null;
-            }
-        }
-    }
-}
-
-function removeSocketFromRooms(socketId, reason = "disconnect") {
-    for (const code in rooms) {
-        const room = rooms[code];
-
-        if (room.codeTyperMultiplayer && room.codeTyperMultiplayer.players[socketId]) {
-            delete room.codeTyperMultiplayer.players[socketId];
-            io.to(code).emit("codetyper-progress-update", room.codeTyperMultiplayer.players);
-        }
-
-        const index = room.players.findIndex((p) => p.id === socketId);
-
-        if (index !== -1) {
-            room.players.splice(index, 1);
-            touchRoom(room, `player-${reason}`);
-
-            if (room.players.length === 0) {
-                clearRoomTimers(room);
-                appendCleanupArchive({ roomCode: code, action: "removed-empty-room", reason });
-                delete rooms[code];
-            } else {
-                if (room.host === socketId) {
-                    room.host = room.players[0].id;
-                }
-
-                if (room.selectedGame === "bugFixerGame") {
-                    if (room.bugFixer) {
-                        clearAllBugFixerTimers(room.bugFixer);
-                        ensureBugFixerPlayerState(room);
-                    }
-
-                    if (room.players.length < BUG_FIXER_MIN_PLAYERS) {
-                        room.bugFixer = room.bugFixer || {
-                            scores: {},
-                            hands: {},
-                            roundNumber: 0,
-                        };
-                        room.bugFixer.active = false;
-                        room.bugFixer.currentRound = null;
-                        room.bugFixer.lastResult = {
-                            message: `Need at least ${BUG_FIXER_MIN_PLAYERS} players to continue.`,
-                        };
-                        emitBugFixerState(code);
-                    } else if (room.bugFixer && room.bugFixer.active) {
-                        startNextBugFixerRound(code);
-                    } else {
-                        emitBugFixerState(code);
-                    }
-                } else if (room.selectedGame === "programmerProphunt") {
-                    if (room.prophunt) {
-                        clearProphuntTimers(room.prophunt);
-                    }
-
-                    if (room.players.length < PROPHUNT_MIN_PLAYERS || room.players.length % 2 !== 0) {
-                        room.prophunt = room.prophunt || {
-                            scores: { A: 0, B: 0 },
-                            timerHandles: { phaseTimeout: null }
-                        };
-                        room.prophunt.active = false;
-                        room.prophunt.message = `Need at least ${PROPHUNT_MIN_PLAYERS} players and an even player count to continue.`;
-                        room.prophunt.lastResultMessage = room.prophunt.message;
-                        emitProphuntState(code);
-                    } else if (room.prophunt && room.prophunt.active) {
-                        room.prophunt.teams = {
-                            A: room.prophunt.teams.A.filter(id => room.players.some(player => player.id === id)),
-                            B: room.prophunt.teams.B.filter(id => room.players.some(player => player.id === id))
-                        };
-                        emitProphuntState(code);
-                    } else {
-                        emitProphuntState(code);
-                    }
-                }
-
-                emitRoomUpdate(code);
-            }
-        }
-    }
-}
-
-function runRoomJanitor() {
-    const now = Date.now();
-
-    for (const roomCode of Object.keys(rooms)) {
-        const room = rooms[roomCode];
-        if (!room) {
-            continue;
-        }
-
-        if (!room.lastActivityAt) {
-            room.lastActivityAt = now;
-        }
-
-        pruneRoomTransientData(roomCode);
-
-        if (!Array.isArray(room.players) || room.players.length === 0) {
-            clearRoomTimers(room);
-            appendCleanupArchive({ roomCode, action: "janitor-removed-empty-room" });
-            delete rooms[roomCode];
-            continue;
-        }
-
-        if (isRoomGameActive(room)) {
-            continue;
-        }
-
-        const idleMs = now - room.lastActivityAt;
-        if (idleMs >= ROOM_IDLE_TTL_MS) {
-            clearRoomTimers(room);
-            appendCleanupArchive({ roomCode, action: "janitor-removed-idle-room", idleMs });
-            delete rooms[roomCode];
-        }
-    }
-}
+// ─── Room Janitor ─────────────────────────────────────────────────────────────
 
 setInterval(runRoomJanitor, ROOM_JANITOR_INTERVAL_MS);
 
-function shuffle(array) {
-    const copy = [...array];
-    for (let i = copy.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [copy[i], copy[j]] = [copy[j], copy[i]];
-    }
-    return copy;
-}
-
-function sampleUnique(array, count) {
-    if (count > array.length) {
-        return [];
-    }
-
-    return shuffle(array).slice(0, count);
-}
-
-function randomItem(array) {
-    if (!Array.isArray(array) || array.length === 0) {
-        return null;
-    }
-
-    return array[Math.floor(Math.random() * array.length)];
-}
-
-function sanitizeNonNegativeInt(value, fallback = 0) {
-    const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed < 0) {
-        return fallback;
-    }
-    return parsed;
-}
-
-function clearBugFixerTimer(state, key) {
-    if (!state || !state.timerHandles || !state.timerHandles[key]) {
-        return;
-    }
-
-    clearTimeout(state.timerHandles[key]);
-    state.timerHandles[key] = null;
-}
-
-function clearAllBugFixerTimers(state) {
-    clearBugFixerTimer(state, "submissionTimeout");
-    clearBugFixerTimer(state, "deciderTimeout");
-    clearBugFixerTimer(state, "finalizeTimeout");
-}
-
-function clearProphuntTimers(state) {
-    if (!state || !state.timerHandles) {
-        return;
-    }
-    if (state.timerHandles.phaseTimeout) {
-        clearTimeout(state.timerHandles.phaseTimeout);
-        state.timerHandles.phaseTimeout = null;
-    }
-}
-
-function countPromptBlanks(prompt) {
-    const matches = String(prompt || "").match(/_{5}/g);
-    return matches ? matches.length : 0;
-}
-
-function getSolutionResponses() {
-    return bugFixerData.solutions.map((entry) => entry.response).filter(Boolean);
-}
-
-function drawCardsForHand(currentHand, targetSize) {
-    const responses = getSolutionResponses();
-    const safeHand = Array.isArray(currentHand) ? [...currentHand] : [];
-
-    while (safeHand.length < targetSize) {
-        const options = responses.filter((card) => !safeHand.includes(card));
-        if (options.length === 0) {
-            break;
-        }
-        const draw = options[Math.floor(Math.random() * options.length)];
-        safeHand.push(draw);
-    }
-
-    return safeHand;
-}
-
-function ensureBugFixerPlayerState(room) {
-    if (!room.bugFixer) {
-        return;
-    }
-
-    if (!room.bugFixer.scores) {
-        room.bugFixer.scores = {};
-    }
-    if (!room.bugFixer.hands) {
-        room.bugFixer.hands = {};
-    }
-
-    const validIds = room.players.map((player) => player.id);
-    const staleScoreIds = Object.keys(room.bugFixer.scores).filter((id) => !validIds.includes(id));
-    staleScoreIds.forEach((id) => {
-        delete room.bugFixer.scores[id];
-    });
-
-    const staleHandIds = Object.keys(room.bugFixer.hands).filter((id) => !validIds.includes(id));
-    staleHandIds.forEach((id) => {
-        delete room.bugFixer.hands[id];
-    });
-
-    room.players.forEach((player) => {
-        if (typeof room.bugFixer.scores[player.id] !== "number") {
-            room.bugFixer.scores[player.id] = 0;
-        }
-        room.bugFixer.hands[player.id] = drawCardsForHand(room.bugFixer.hands[player.id], BUG_FIXER_HAND_SIZE);
-    });
-}
-
-function getPlayerName(room, id) {
-    const player = room.players.find((entry) => entry.id === id);
-    return player ? player.name : "Unknown";
-}
-
-function buildBugFixerScores(room, state) {
-    return room.players.map((player) => ({
-        id: player.id,
-        name: player.name,
-        score: state && state.scores[player.id] ? state.scores[player.id] : 0,
-    }));
-}
-
-function nextPrompt(state) {
-    const prompts = bugFixerData.prompts;
-    if (prompts.length === 0) {
-        return null;
-    }
-
-    return randomItem(prompts);
-}
-
-function ensureDeciderOrder(room) {
-    const state = room.bugFixer;
-    const playerIds = room.players.map((player) => player.id);
-
-    if (!Array.isArray(state.deciderOrder) || state.deciderOrder.length !== playerIds.length) {
-        state.deciderOrder = shuffle(playerIds);
-        state.deciderIndex = 0;
-        return;
-    }
-
-    const missing = state.deciderOrder.some((id) => !playerIds.includes(id));
-    if (missing) {
-        state.deciderOrder = shuffle(playerIds);
-        state.deciderIndex = 0;
-    }
-}
-
-function pickRandomCardsFromHand(hand, count) {
-    const safeHand = Array.isArray(hand) ? [...hand] : [];
-    const wanted = Math.max(1, count);
-    if (safeHand.length <= wanted) {
-        return safeHand;
-    }
-    return sampleUnique(safeHand, wanted);
-}
-
-function buildSubmissionOptions(round) {
-    const shuffled = shuffle(Object.values(round.submissions));
-    return shuffled.map((submission, index) => ({
-        submissionId: index + 1,
-        playerId: submission.playerId,
-        text: submission.text,
-    }));
-}
-
-function getNonDeciderPlayerIds(room, round) {
-    return room.players.map((player) => player.id).filter((playerId) => playerId !== round.deciderId);
-}
-
-function chooseLowestScorePlayerId(room, round) {
-    const eligible = getNonDeciderPlayerIds(room, round);
-    if (eligible.length === 0) {
-        return null;
-    }
-
-    let lowest = Number.POSITIVE_INFINITY;
-    eligible.forEach((playerId) => {
-        const score = room.bugFixer.scores[playerId] || 0;
-        if (score < lowest) {
-            lowest = score;
-        }
-    });
-
-    const tied = eligible.filter((playerId) => (room.bugFixer.scores[playerId] || 0) === lowest);
-    return randomItem(tied);
-}
-
-function replenishHandsAfterRound(room, round) {
-    Object.values(round.submissions).forEach((submission) => {
-        const currentHand = room.bugFixer.hands[submission.playerId] || [];
-        const remaining = [...currentHand];
-
-        submission.cards.forEach((card) => {
-            const removeAt = remaining.indexOf(card);
-            if (removeAt !== -1) {
-                remaining.splice(removeAt, 1);
-            }
-        });
-
-        room.bugFixer.hands[submission.playerId] = drawCardsForHand(remaining, BUG_FIXER_HAND_SIZE);
-    });
-}
-
-function enterJudgingPhase(roomCode) {
-    const room = rooms[roomCode];
-    if (!room || !room.bugFixer || !room.bugFixer.currentRound) {
-        return;
-    }
-
-    const state = room.bugFixer;
-    const round = state.currentRound;
-
-    round.phase = "judging";
-    round.submissionOptions = buildSubmissionOptions(round);
-    round.deciderDeadlineAt = null;
-    round.finalizeDeadlineAt = null;
-    round.pendingWinnerPlayerId = null;
-    round.pendingWinnerSubmissionId = null;
-
-    clearBugFixerTimer(state, "submissionTimeout");
-    clearBugFixerTimer(state, "finalizeTimeout");
-    clearBugFixerTimer(state, "deciderTimeout");
-
-    const deciderSeconds = sanitizeNonNegativeInt(state.settings && state.settings.deciderSeconds, 0);
-    if (deciderSeconds > 0) {
-        round.deciderDeadlineAt = Date.now() + deciderSeconds * 1000;
-        state.timerHandles.deciderTimeout = setTimeout(() => {
-            const liveRoom = rooms[roomCode];
-            if (!liveRoom || !liveRoom.bugFixer || !liveRoom.bugFixer.active || !liveRoom.bugFixer.currentRound) {
-                return;
-            }
-
-            const liveRound = liveRoom.bugFixer.currentRound;
-            if (liveRound.phase !== "judging" && liveRound.phase !== "confirming") {
-                return;
-            }
-
-            let timedOutWinnerId = null;
-            if ((liveRoom.bugFixer.settings && liveRoom.bugFixer.settings.deciderTimeoutAction) === "lowest-score") {
-                timedOutWinnerId = chooseLowestScorePlayerId(liveRoom, liveRound);
-            }
-
-            finalizeBugFixerRound(roomCode, {
-                winnerPlayerId: timedOutWinnerId,
-                reason: timedOutWinnerId ? "decider-timeout-lowest" : "decider-timeout-none",
-            });
-        }, deciderSeconds * 1000);
-    }
-
-    emitBugFixerState(roomCode);
-}
-
-function finalizeBugFixerRound(roomCode, { winnerPlayerId = null, reason = "decider-picked" } = {}) {
-    const room = rooms[roomCode];
-    if (
-        !room ||
-        room.selectedGame !== "bugFixerGame" ||
-        !room.bugFixer ||
-        !room.bugFixer.active ||
-        !room.bugFixer.currentRound
-    ) {
-        return;
-    }
-
-    const state = room.bugFixer;
-    const round = state.currentRound;
-
-    clearAllBugFixerTimers(state);
-
-    if (winnerPlayerId) {
-        if (!state.scores[winnerPlayerId]) {
-            state.scores[winnerPlayerId] = 0;
-        }
-        state.scores[winnerPlayerId] += 1;
-    }
-
-    replenishHandsAfterRound(room, round);
-
-    const revealedSubmissions = (round.submissionOptions || []).map((option) => ({
-        playerName: getPlayerName(room, option.playerId),
-        text: option.text,
-    }));
-
-    if (!winnerPlayerId) {
-        state.lastResult = {
-            message:
-                reason === "decider-timeout-none"
-                    ? `${getPlayerName(room, round.deciderId)} timed out. No point awarded this round.`
-                    : "No point awarded this round.",
-            revealedSubmissions,
-        };
-    } else if (reason === "decider-timeout-lowest") {
-        state.lastResult = {
-            message: `${getPlayerName(room, round.deciderId)} timed out. Point awarded to lowest-score player ${getPlayerName(room, winnerPlayerId)}.`,
-            revealedSubmissions,
-        };
-    } else {
-        state.lastResult = {
-            message: `${getPlayerName(room, round.deciderId)} picked ${getPlayerName(room, winnerPlayerId)}.`,
-            revealedSubmissions,
-        };
-    }
-
-    if (winnerPlayerId && state.scores[winnerPlayerId] >= state.pointsToWin) {
-        state.active = false;
-        state.currentRound = null;
-        state.lastResult = {
-            message: `${getPlayerName(room, winnerPlayerId)} wins Bug Fixer (${state.scores[winnerPlayerId]} points)!`,
-            revealedSubmissions,
-        };
-        emitBugFixerState(roomCode);
-        return;
-    }
-
-    startNextBugFixerRound(roomCode);
-}
-
-function autoSubmitMissingPlayers(roomCode) {
-    const room = rooms[roomCode];
-    if (!room || !room.bugFixer || !room.bugFixer.currentRound || !room.bugFixer.active) {
-        return;
-    }
-
-    const round = room.bugFixer.currentRound;
-    if (round.phase !== "submitting") {
-        return;
-    }
-
-    const nonDeciderIds = getNonDeciderPlayerIds(room, round);
-    nonDeciderIds.forEach((playerId) => {
-        if (round.submissions[playerId]) {
-            return;
-        }
-
-        const hand = room.bugFixer.hands[playerId] || [];
-        const pickedCards = pickRandomCardsFromHand(hand, round.responsesRequired);
-        round.submissions[playerId] = {
-            playerId,
-            cards: pickedCards,
-            text: pickedCards.join(" | "),
-        };
-    });
-
-    enterJudgingPhase(roomCode);
-}
-
-function buildBugFixerPayloadForPlayer(room, playerId) {
-    const state = room.bugFixer;
-    const canStart =
-        room.selectedGame === "bugFixerGame" && room.host === playerId && room.players.length >= BUG_FIXER_MIN_PLAYERS;
-
-    if (!state || !state.active || !state.currentRound) {
-        return {
-            active: false,
-            canStart,
-            message:
-                room.players.length < BUG_FIXER_MIN_PLAYERS
-                    ? `Need at least ${BUG_FIXER_MIN_PLAYERS} players to start Bug Fixer.`
-                    : "Bug Fixer is ready.",
-            pointsToWin: state && state.pointsToWin ? state.pointsToWin : null,
-            timerSettings: state && state.settings ? state.settings : null,
-            scores: buildBugFixerScores(room, state || { scores: {} }),
-            lastResult: state ? state.lastResult : null,
-        };
-    }
-
-    const round = state.currentRound;
-    const isDecider = round.deciderId === playerId;
-    const submissionsNeeded = room.players.length - 1;
-    const submittedCount = Object.keys(round.submissions).length;
-    let message = "";
-
-    if (round.phase === "submitting") {
-        message = `Waiting for submissions (${submittedCount}/${submissionsNeeded}).`;
-    } else if (round.phase === "judging") {
-        message = isDecider ? "Choose a winner." : "Decider is choosing a winner.";
-    } else if (round.phase === "confirming") {
-        message = isDecider
-            ? "Winner selected. You can still change it before finalization."
-            : "Decider locked a choice. Finalizing shortly.";
-    }
-
-    return {
-        active: true,
-        canStart,
-        message,
-        roundNumber: state.roundNumber,
-        phase: round.phase,
-        prompt: round.prompt,
-        responsesRequired: round.responsesRequired,
-        pointsToWin: state.pointsToWin,
-        timerSettings: state.settings,
-        deciderId: round.deciderId,
-        deciderName: getPlayerName(room, round.deciderId),
-        isDecider,
-        yourHand: isDecider ? [] : state.hands[playerId] || [],
-        yourSubmitted: Boolean(round.submissions[playerId]),
-        submissionsNeeded,
-        submittedCount,
-        submissionOptions:
-            isDecider && (round.phase === "judging" || round.phase === "confirming")
-                ? round.submissionOptions.map((option) => ({
-                      submissionId: option.submissionId,
-                      text: option.text,
-                  }))
-                : [],
-        submissionDeadlineTs: round.submissionDeadlineAt || null,
-        deciderDeadlineTs: round.deciderDeadlineAt || null,
-        finalizeDeadlineTs: round.finalizeDeadlineAt || null,
-        pendingWinnerSubmissionId: isDecider ? round.pendingWinnerSubmissionId || null : null,
-        serverNowTs: Date.now(),
-        scores: buildBugFixerScores(room, state),
-        lastResult: state.lastResult,
-    };
-}
-
-function emitBugFixerState(roomCode) {
-    const room = rooms[roomCode];
-    if (!room || room.selectedGame !== "bugFixerGame") {
-        return;
-    }
-
-    room.players.forEach((player) => {
-        io.to(player.id).emit("bugfixer-state", buildBugFixerPayloadForPlayer(room, player.id));
-    });
-}
-
-function startNextBugFixerRound(roomCode) {
-    const room = rooms[roomCode];
-    if (!room || room.selectedGame !== "bugFixerGame" || !room.bugFixer || !room.bugFixer.active) {
-        return;
-    }
-
-    if (room.players.length < BUG_FIXER_MIN_PLAYERS) {
-        room.bugFixer.active = false;
-        room.bugFixer.currentRound = null;
-        room.bugFixer.lastResult = { message: `Need at least ${BUG_FIXER_MIN_PLAYERS} players to continue.` };
-        emitBugFixerState(roomCode);
-        return;
-    }
-
-    ensureBugFixerPlayerState(room);
-    ensureDeciderOrder(room);
-    const state = room.bugFixer;
-
-    clearAllBugFixerTimers(state);
-
-    if (state.deciderIndex >= state.deciderOrder.length) {
-        state.deciderIndex = 0;
-    }
-
-    const deciderId = state.deciderOrder[state.deciderIndex];
-    state.deciderIndex += 1;
-
-    const promptCard = nextPrompt(state);
-    if (!promptCard) {
-        state.active = false;
-        state.currentRound = null;
-        state.lastResult = { message: "No prompt cards are available." };
-        emitBugFixerState(roomCode);
-        return;
-    }
-
-    const promptText = String(promptCard.prompt || "");
-    const explicitResponses = Number(promptCard.responses) || 1;
-    const blankCount = countPromptBlanks(promptText);
-    const responsesRequired = Math.max(1, blankCount || explicitResponses);
-
-    state.roundNumber += 1;
-    state.currentRound = {
-        phase: "submitting",
-        deciderId,
-        prompt: promptText,
-        responsesRequired,
-        submissions: {},
-        submissionOptions: [],
-        pendingWinnerPlayerId: null,
-        pendingWinnerSubmissionId: null,
-        submissionDeadlineAt: null,
-        deciderDeadlineAt: null,
-        finalizeDeadlineAt: null,
-    };
-
-    const submitSeconds = sanitizeNonNegativeInt(state.settings && state.settings.submissionSeconds, 0);
-    if (submitSeconds > 0) {
-        state.currentRound.submissionDeadlineAt = Date.now() + submitSeconds * 1000;
-        state.timerHandles.submissionTimeout = setTimeout(() => {
-            autoSubmitMissingPlayers(roomCode);
-        }, submitSeconds * 1000);
-    }
-
-    emitBugFixerState(roomCode);
-}
-
-function initializeBugFixer(roomCode, payload) {
-    const room = rooms[roomCode];
-    if (!room) {
-        return "Room not found.";
-    }
-
-    if (room.players.length < BUG_FIXER_MIN_PLAYERS) {
-        return `Need at least ${BUG_FIXER_MIN_PLAYERS} players to start Bug Fixer.`;
-    }
-
-    const promptCount = bugFixerData.prompts.length;
-    const solutionCount = bugFixerData.solutions.filter((entry) => entry.response).length;
-    if (promptCount === 0 || solutionCount < BUG_FIXER_HAND_SIZE) {
-        return "Bug Fixer data is incomplete. Check prompt and solution card JSON files.";
-    }
-
-    const targetPoints = Number(payload && payload.pointsToWin);
-    if (!Number.isInteger(targetPoints) || targetPoints < 1) {
-        return "Points to win must be a whole number of at least 1.";
-    }
-
-    const submissionSeconds = sanitizeNonNegativeInt(payload && payload.submissionSeconds, 0);
-    const deciderSeconds = sanitizeNonNegativeInt(payload && payload.deciderSeconds, 0);
-    const timeoutAction = payload && payload.deciderTimeoutAction === "lowest-score" ? "lowest-score" : "no-point";
-
-    const scores = {};
-    const hands = {};
-    room.players.forEach((player) => {
-        scores[player.id] = 0;
-        hands[player.id] = drawCardsForHand([], BUG_FIXER_HAND_SIZE);
-    });
-
-    if (room.bugFixer) {
-        clearAllBugFixerTimers(room.bugFixer);
-    }
-
-    room.bugFixer = {
-        active: true,
-        pointsToWin: targetPoints,
-        settings: {
-            submissionSeconds,
-            deciderSeconds,
-            deciderTimeoutAction: timeoutAction,
-        },
-        scores,
-        hands,
-        deciderOrder: [],
-        deciderIndex: 0,
-        roundNumber: 0,
-        currentRound: null,
-        lastResult: null,
-        timerHandles: {
-            submissionTimeout: null,
-            deciderTimeout: null,
-            finalizeTimeout: null,
-        },
-    };
-
-    startNextBugFixerRound(roomCode);
-    return null;
-}
-
-function getProphuntTeamName(teamId) {
-    return teamId === "A" ? "Team A" : "Team B";
-}
-
-function getPlayerTeam(state, playerId) {
-    if (!state || !state.teams) {
-        return null;
-    }
-    if (state.teams.A.includes(playerId)) {
-        return "A";
-    }
-    if (state.teams.B.includes(playerId)) {
-        return "B";
-    }
-    return null;
-}
-
-function createProphuntBaseLines(complexity) {
-    const key = ["easy", "medium", "hard"].includes(complexity) ? complexity : "easy";
-    const snippet = randomItem(PROPHUNT_SNIPPETS[key]) || PROPHUNT_SNIPPETS.easy[0];
-    return snippet.map((text, index) => ({ ref: `B:${index + 1}`, text }));
-}
-
-function buildProphuntComposedLines(room, state) {
-    const byRef = {};
-    Object.entries(state.hiderAssignments || {}).forEach(([playerId, assignment]) => {
-        if (!assignment) {
-            return;
-        }
-        byRef[assignment.lineRef] = {
-            ...assignment,
-            playerId
-        };
-    });
-
-    const baseLines = (state.baseLines || []).map(base => {
-        const override = byRef[base.ref];
-        return {
-            ref: base.ref,
-            text: override ? override.text : base.text,
-            ownerPlayerId: override ? override.playerId : null,
-            isNew: false
-        };
-    });
-
-    const newLines = Object.entries(byRef)
-        .filter(([, assignment]) => assignment.isNew)
-        .sort((a, b) => getPlayerName(room, a[1].playerId).localeCompare(getPlayerName(room, b[1].playerId)))
-        .map(([, assignment]) => ({
-            ref: assignment.lineRef,
-            text: assignment.text,
-            ownerPlayerId: assignment.playerId,
-            isNew: true
-        }));
-
-    return [...baseLines, ...newLines];
-}
-
-function buildProphuntLineOptions(room, state, playerId) {
-    const current = state.hiderAssignments[playerId];
-    const currentRef = current ? current.lineRef : null;
-    const options = [];
-
-    (state.baseLines || []).forEach((line, index) => {
-        const takenByOther = Object.entries(state.hiderAssignments || {}).some(([otherPlayerId, assignment]) => {
-            return otherPlayerId !== playerId && assignment && assignment.lineRef === line.ref;
-        });
-        if (!takenByOther || currentRef === line.ref) {
-            options.push({
-                ref: line.ref,
-                label: `Line ${index + 1}`
-            });
-        }
-    });
-
-    options.push({ ref: "NEW_LINE", label: "Create new line" });
-    return options;
-}
-
-function emitProphuntState(roomCode) {
-    const room = rooms[roomCode];
-    if (!room || room.selectedGame !== "programmerProphunt") {
-        return;
-    }
-
-    room.players.forEach(player => {
-        io.to(player.id).emit("prophunt-state", buildProphuntPayloadForPlayer(room, player.id));
-    });
-}
-
-function buildProphuntPayloadForPlayer(room, playerId) {
-    const state = room.prophunt;
-    const canStart = room.selectedGame === "programmerProphunt"
-        && room.host === playerId
-        && room.players.length >= PROPHUNT_MIN_PLAYERS
-        && room.players.length % 2 === 0;
-
-    if (!state || !state.active) {
-        return {
-            active: false,
-            canStart,
-            message: room.players.length < PROPHUNT_MIN_PLAYERS
-                ? `Need at least ${PROPHUNT_MIN_PLAYERS} players to start Programmer Prophunt.`
-                : room.players.length % 2 !== 0
-                    ? "Programmer Prophunt needs an even number of players."
-                    : "Programmer Prophunt is ready.",
-            teamA: [],
-            teamB: [],
-            scores: state && state.scores ? state.scores : { A: 0, B: 0 },
-            lastResultMessage: state && state.lastResultMessage ? state.lastResultMessage : ""
-        };
-    }
-
-    const playerTeam = getPlayerTeam(state, playerId);
-    const role = state.phase === "hiding"
-        ? (playerTeam === state.hidingTeam ? "hider" : "finder")
-        : state.phase === "finding"
-            ? (playerTeam === state.finderTeam ? "finder" : "hider")
-            : "observer";
-
-    const composedLines = buildProphuntComposedLines(room, state);
-    const shouldShowCode = state.phase !== "hiding" || role === "hider";
-    const visibleLines = shouldShowCode
-        ? composedLines.map((line, index) => ({ number: index + 1, ref: line.ref, text: line.text }))
-        : [];
-
-    const finderLineOptions = state.phase === "finding" && role === "finder"
-        ? composedLines.map((line, index) => ({ ref: line.ref, label: `Line ${index + 1}` }))
-        : [];
-
-    const yourAssignment = state.hiderAssignments[playerId] || null;
-    const yourDraftLine = yourAssignment ? yourAssignment.text : "";
-    const message = state.message || "";
-
-    return {
-        active: true,
-        canStart,
-        message,
-        phase: state.phase,
-        roundNumber: state.roundNumber,
-        totalRounds: state.totalRounds,
-        role,
-        hidingTeamName: getProphuntTeamName(state.hidingTeam),
-        finderTeamName: getProphuntTeamName(state.finderTeam),
-        teamA: state.teams.A.map(id => getPlayerName(room, id)),
-        teamB: state.teams.B.map(id => getPlayerName(room, id)),
-        visibleLines,
-        editableLineOptions: state.phase === "hiding" && role === "hider"
-            ? buildProphuntLineOptions(room, state, playerId)
-            : [],
-        finderLineOptions,
-        yourDraftLine,
-        scores: state.scores,
-        lastResultMessage: state.lastResultMessage || "",
-        deadlineTs: state.deadlineTs || null,
-        serverNowTs: Date.now()
-    };
-}
-
-function startProphuntHidingPhase(roomCode) {
-    const room = rooms[roomCode];
-    if (!room || room.selectedGame !== "programmerProphunt" || !room.prophunt || !room.prophunt.active) {
-        return;
-    }
-
-    const state = room.prophunt;
-    clearProphuntTimers(state);
-
-    state.phase = "hiding";
-    state.message = `Round ${state.roundNumber}: ${getProphuntTeamName(state.hidingTeam)} is hiding.`;
-    state.baseLines = createProphuntBaseLines(state.settings.complexity);
-    state.hiderAssignments = {};
-    state.finderGuesses = {};
-    state.deadlineTs = Date.now() + (state.settings.roundSeconds * 1000);
-
-    state.timerHandles.phaseTimeout = setTimeout(() => {
-        finishProphuntHidingPhase(roomCode, true);
-    }, state.settings.roundSeconds * 1000);
-
-    emitProphuntState(roomCode);
-}
-
-function finishProphuntHidingPhase(roomCode, fromTimeout = false) {
-    const room = rooms[roomCode];
-    if (!room || !room.prophunt || !room.prophunt.active || room.prophunt.phase !== "hiding") {
-        return;
-    }
-
-    const state = room.prophunt;
-    clearProphuntTimers(state);
-
-    const hiders = state.teams[state.hidingTeam];
-    let penalties = 0;
-    hiders.forEach(playerId => {
-        const assignment = state.hiderAssignments[playerId];
-        if (!assignment || !assignment.confirmed) {
-            penalties += 1;
-            delete state.hiderAssignments[playerId];
-        }
-    });
-
-    if (fromTimeout && penalties > 0) {
-        state.scores[state.hidingTeam] -= penalties;
-    }
-
-    state.phase = "finding";
-    state.message = `${getProphuntTeamName(state.finderTeam)} is finding suspicious lines.`;
-    state.deadlineTs = Date.now() + (state.settings.roundSeconds * 1000);
-
-    state.timerHandles.phaseTimeout = setTimeout(() => {
-        finalizeProphuntRound(roomCode, true);
-    }, state.settings.roundSeconds * 1000);
-
-    emitProphuntState(roomCode);
-}
-
-function finalizeProphuntRound(roomCode, fromTimeout = false) {
-    const room = rooms[roomCode];
-    if (!room || !room.prophunt || !room.prophunt.active || room.prophunt.phase !== "finding") {
-        return;
-    }
-
-    const state = room.prophunt;
-    clearProphuntTimers(state);
-
-    const finders = state.teams[state.finderTeam];
-    let finderPenalty = 0;
-    finders.forEach(playerId => {
-        const guess = state.finderGuesses[playerId];
-        if (!guess || !guess.confirmed) {
-            finderPenalty += 1;
-        }
-    });
-    if (fromTimeout && finderPenalty > 0) {
-        state.scores[state.finderTeam] -= finderPenalty;
-    }
-
-    const hiderByLine = {};
-    Object.entries(state.hiderAssignments || {}).forEach(([playerId, assignment]) => {
-        if (assignment) {
-            hiderByLine[assignment.lineRef] = playerId;
-        }
-    });
-
-    let finderPoints = 0;
-    const calledOutHiders = new Set();
-    Object.values(state.finderGuesses || {}).forEach(guess => {
-        if (!guess || !guess.confirmed) {
-            return;
-        }
-        const calledHider = hiderByLine[guess.lineRef];
-        if (calledHider) {
-            finderPoints += 1;
-            calledOutHiders.add(calledHider);
-        }
-    });
-
-    const hiderIds = Object.keys(state.hiderAssignments || {});
-    const hiddenCount = hiderIds.filter(id => !calledOutHiders.has(id)).length;
-
-    state.scores[state.finderTeam] += finderPoints;
-    state.scores[state.hidingTeam] += hiddenCount;
-
-    state.lastResultMessage = `${getProphuntTeamName(state.finderTeam)} earned ${finderPoints} point(s); ${getProphuntTeamName(state.hidingTeam)} earned ${hiddenCount} point(s).${finderPenalty > 0 ? ` ${getProphuntTeamName(state.finderTeam)} also lost ${finderPenalty} point(s) from timeouts.` : ""}`;
-
-    if (state.roundNumber >= state.totalRounds) {
-        state.active = false;
-        state.phase = "finished";
-        state.message = `Programmer Prophunt finished. Team A: ${state.scores.A}, Team B: ${state.scores.B}.`;
-        state.deadlineTs = null;
-        emitProphuntState(roomCode);
-        return;
-    }
-
-    state.roundNumber += 1;
-    state.hidingTeam = state.hidingTeam === "A" ? "B" : "A";
-    state.finderTeam = state.hidingTeam === "A" ? "B" : "A";
-    startProphuntHidingPhase(roomCode);
-}
-
-function initializeProphunt(roomCode, payload) {
-    const room = rooms[roomCode];
-    if (!room) {
-        return "Room not found.";
-    }
-
-    if (room.players.length < PROPHUNT_MIN_PLAYERS) {
-        return `Need at least ${PROPHUNT_MIN_PLAYERS} players to start Programmer Prophunt.`;
-    }
-    if (room.players.length % 2 !== 0) {
-        return "Programmer Prophunt requires an even number of players.";
-    }
-
-    const complexity = ["easy", "medium", "hard"].includes(payload && payload.complexity)
-        ? payload.complexity
-        : "easy";
-    const roundSeconds = sanitizeNonNegativeInt(payload && payload.roundSeconds, 45);
-    const totalRounds = sanitizeNonNegativeInt(payload && payload.rounds, 3);
-    if (roundSeconds < 5) {
-        return "Round timer must be at least 5 seconds.";
-    }
-    if (totalRounds < 1) {
-        return "Rounds must be at least 1.";
-    }
-
-    if (room.prophunt) {
-        clearProphuntTimers(room.prophunt);
-    }
-
-    const shuffledPlayers = shuffle(room.players.map(player => player.id));
-    const half = shuffledPlayers.length / 2;
-
-    room.prophunt = {
-        active: true,
-        settings: {
-            complexity,
-            roundSeconds
-        },
-        totalRounds,
-        roundNumber: 1,
-        teams: {
-            A: shuffledPlayers.slice(0, half),
-            B: shuffledPlayers.slice(half)
-        },
-        scores: {
-            A: 0,
-            B: 0
-        },
-        hidingTeam: "A",
-        finderTeam: "B",
-        phase: "hiding",
-        baseLines: [],
-        hiderAssignments: {},
-        finderGuesses: {},
-        message: "",
-        lastResultMessage: "",
-        deadlineTs: null,
-        timerHandles: {
-            phaseTimeout: null
-        }
-    };
-
-    startProphuntHidingPhase(roomCode);
-    return null;
-}
-
-function generateRoomCode() {
-    return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
-function createRoom({ hostId, hostName, visibility = "private", selectedGame = null }) {
-    const roomCode = generateRoomCode();
-    rooms[roomCode] = {
-        host: hostId,
-        players: [{ id: hostId, name: hostName }],
-        selectedGame,
-        visibility,
-        bugFixer: null,
-        prophunt: null,
-        createdAt: Date.now(),
-        lastActivityAt: Date.now(),
-        lastActivityReason: "room-created"
-    };
-    return roomCode;
-}
-
-function getPreferredGameModes(preferredGameModes) {
-    if (!Array.isArray(preferredGameModes)) {
-        return [];
-    }
-
-    const unique = [...new Set(preferredGameModes.map((entry) => String(entry || "").trim()).filter(Boolean))];
-    return unique.filter((game) => validGameModeNames.has(game));
-}
-
-function findAvailablePublicRoomsByGames(preferredGames) {
-    const preferred = new Set(preferredGames);
-    return Object.entries(rooms)
-        .filter(([, room]) => {
-            if (!room || room.visibility !== "public") {
-                return false;
-            }
-
-            if (!room.selectedGame || !preferred.has(room.selectedGame)) {
-                return false;
-            }
-
-            if (room.selectedGame === "bugFixerGame" && room.bugFixer && room.bugFixer.active) {
-                return false;
-            }
-            if (room.selectedGame === "programmerProphunt" && room.prophunt && room.prophunt.active) {
-                return false;
-            }
-
-            return true;
-        })
-        .map(([roomCode, room]) => ({ roomCode, room }));
-}
-
-function emitRoomUpdate(roomCode) {
-    const room = rooms[roomCode];
-    if (!room) {
-        return;
-    }
-
-    touchRoom(room, "emit-room-update");
-
-    io.to(roomCode).emit("update-players", {
-        players: room.players,
-        hostId: room.host,
-        visibility: room.visibility || "private",
-    });
-}
+// ─── Socket.IO Handlers ───────────────────────────────────────────────────────
 
 io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
+    // ── Lobby Chat ────────────────────────────────────────────────────────────
 
     socket.on("lobby-chat", ({ roomCode, name, message }) => {
         const room = rooms[roomCode];
         if (!room) return;
-        io.to(room.id).emit("lobby-chat", { name, message });
+        io.to(roomCode).emit("lobby-chat", { name, message });
     });
 
     socket.on("lobby-reaction", ({ roomCode, name, emoji }) => {
         const room = rooms[roomCode];
         if (!room) return;
-        io.to(room.id).emit("lobby-reaction", { name, emoji });
+        io.to(roomCode).emit("lobby-reaction", { name, emoji });
     });
+
+    // ── Room Hosting ──────────────────────────────────────────────────────────
 
     socket.on("host-room", (payload) => {
         const rawName = typeof payload === "object" && payload !== null ? payload.name : payload;
@@ -1368,8 +114,10 @@ io.on("connection", (socket) => {
         socket.join(roomCode);
         touchRoomByCode(roomCode, "host-room");
         socket.emit("room-created", { roomCode, visibility, isHost: true });
-        emitRoomUpdate(roomCode);
+        emitRoomUpdate(roomCode, io);
     });
+
+    // ── Random Matchmaking ────────────────────────────────────────────────────
 
     socket.on("join-random-room", ({ name, preferredGameModes }) => {
         const trimmedName = String(name || "").trim();
@@ -1378,7 +126,7 @@ io.on("connection", (socket) => {
             return;
         }
 
-        const preferred = getPreferredGameModes(preferredGameModes);
+        const preferred = getPreferredGameModes(preferredGameModes, validGameModeNames);
         if (preferred.length === 0) {
             socket.emit("join-error", "Select at least one valid game for random matchmaking.");
             return;
@@ -1392,14 +140,11 @@ io.on("connection", (socket) => {
         if (availableRooms.length > 0) {
             const byGame = {};
             availableRooms.forEach((entry) => {
-                if (!byGame[entry.room.selectedGame]) {
-                    byGame[entry.room.selectedGame] = [];
-                }
+                if (!byGame[entry.room.selectedGame]) byGame[entry.room.selectedGame] = [];
                 byGame[entry.room.selectedGame].push(entry);
             });
 
-            const availableGames = Object.keys(byGame);
-            const selectedGame = randomItem(availableGames);
+            const selectedGame = randomItem(Object.keys(byGame));
             const roomEntry = randomItem(byGame[selectedGame]);
             targetRoomCode = roomEntry.roomCode;
             targetRoom = roomEntry.room;
@@ -1415,10 +160,9 @@ io.on("connection", (socket) => {
             created = true;
         }
 
-        const duplicate = !created && targetRoom.players.some(
-            (player) => normalizeName(player.name) === normalizeName(trimmedName)
-        );
-        if (duplicate) {
+        const isDuplicateName =
+            !created && targetRoom.players.some((player) => normalizeName(player.name) === normalizeName(trimmedName));
+        if (isDuplicateName) {
             socket.emit("join-error", "That name is already in this lobby. Choose a different name.");
             return;
         }
@@ -1437,15 +181,17 @@ io.on("connection", (socket) => {
             selectedGame: targetRoom.selectedGame,
         });
 
-        emitRoomUpdate(targetRoomCode);
+        emitRoomUpdate(targetRoomCode, io);
         io.to(targetRoomCode).emit("gamemode-selected", targetRoom.selectedGame);
 
         if (targetRoom.selectedGame === "bugFixerGame") {
-            emitBugFixerState(targetRoomCode);
+            bugFixerService.emitBugFixerState(targetRoomCode);
         } else if (targetRoom.selectedGame === "programmerProphunt") {
-            emitProphuntState(targetRoomCode);
+            prophuntService.emitProphuntState(targetRoomCode);
         }
     });
+
+    // ── Private Room Join ─────────────────────────────────────────────────────
 
     socket.on("join-room", ({ roomCode, name }) => {
         if (!rooms[roomCode]) {
@@ -1459,14 +205,14 @@ io.on("connection", (socket) => {
             return;
         }
 
-        const normalizedIncomingName = normalizeName(name);
-        if (!normalizedIncomingName) {
+        const normalizedName = normalizeName(name);
+        if (!normalizedName) {
             socket.emit("join-error", "Name is required.");
             return;
         }
 
-        const duplicate = room.players.some((player) => normalizeName(player.name) === normalizedIncomingName);
-        if (duplicate) {
+        const isDuplicate = room.players.some((player) => normalizeName(player.name) === normalizedName);
+        if (isDuplicate) {
             socket.emit("join-error", "That name is already in this lobby. Choose a different name.");
             return;
         }
@@ -1485,56 +231,49 @@ io.on("connection", (socket) => {
         touchRoom(room, "join-room");
         socket.emit("room-joined", { roomCode, hostId: room.host });
 
-        emitRoomUpdate(roomCode);
+        emitRoomUpdate(roomCode, io);
 
         if (room.selectedGame) {
             socket.emit("gamemode-selected", room.selectedGame);
             if (room.selectedGame === "bugFixerGame") {
-                emitBugFixerState(roomCode);
+                bugFixerService.emitBugFixerState(roomCode);
             } else if (room.selectedGame === "programmerProphunt") {
-                emitProphuntState(roomCode);
+                prophuntService.emitProphuntState(roomCode);
             }
         }
     });
 
+    // ── Game Mode Selection ───────────────────────────────────────────────────
+
     socket.on("select-gamemode", ({ roomCode, gameMode }) => {
         const room = rooms[roomCode];
-
-        if (!room || room.host !== socket.id) {
-            return;
-        }
-
-        if (room.visibility === "public") {
-            return;
-        }
+        if (!room || room.host !== socket.id || room.visibility === "public") return;
 
         room.selectedGame = gameMode;
         touchRoom(room, "select-gamemode");
-        if (room.bugFixer) {
-            clearAllBugFixerTimers(room.bugFixer);
-        }
-        if (room.prophunt) {
-            clearProphuntTimers(room.prophunt);
-        }
+
+        if (room.bugFixer) clearAllBugFixerTimers(room.bugFixer);
+        if (room.prophunt) clearProphuntTimers(room.prophunt);
         room.bugFixer = null;
         room.prophunt = null;
+
         io.to(roomCode).emit("gamemode-selected", gameMode);
 
         if (gameMode === "bugFixerGame") {
-            emitBugFixerState(roomCode);
+            bugFixerService.emitBugFixerState(roomCode);
         } else if (gameMode === "programmerProphunt") {
-            emitProphuntState(roomCode);
+            prophuntService.emitProphuntState(roomCode);
         }
     });
 
-    socket.on("start-prophunt", payload => {
+    // ── Programmer Prophunt Handlers ──────────────────────────────────────────
+
+    socket.on("start-prophunt", (payload) => {
         const roomCode = payload && payload.roomCode;
         const room = rooms[roomCode];
-        if (!room || room.host !== socket.id || room.selectedGame !== "programmerProphunt") {
-            return;
-        }
+        if (!room || room.host !== socket.id || room.selectedGame !== "programmerProphunt") return;
 
-        const error = initializeProphunt(roomCode, payload || {});
+        const error = prophuntService.initializeProphunt(roomCode, payload || {});
         if (error) {
             socket.emit("prophunt-error", error);
             return;
@@ -1544,9 +283,7 @@ io.on("connection", (socket) => {
 
     socket.on("prophunt-edit-line", ({ roomCode, lineRef, lineText }) => {
         const room = rooms[roomCode];
-        if (!room || room.selectedGame !== "programmerProphunt" || !room.prophunt || !room.prophunt.active) {
-            return;
-        }
+        if (!room || room.selectedGame !== "programmerProphunt" || !room.prophunt || !room.prophunt.active) return;
 
         const state = room.prophunt;
         if (state.phase !== "hiding") {
@@ -1554,8 +291,8 @@ io.on("connection", (socket) => {
             return;
         }
 
-        const team = getPlayerTeam(state, socket.id);
-        if (team !== state.hidingTeam) {
+        const playerTeam = prophuntService.getPlayerTeam(state, socket.id);
+        if (playerTeam !== state.hidingTeam) {
             socket.emit("prophunt-error", "Only the hiding team can edit right now.");
             return;
         }
@@ -1572,45 +309,34 @@ io.on("connection", (socket) => {
             targetRef = `N:${socket.id}`;
             isNew = true;
         } else {
-            const exists = (state.baseLines || []).some(line => line.ref === lineRef);
+            const exists = (state.baseLines || []).some((line) => line.ref === lineRef);
             if (!exists) {
                 socket.emit("prophunt-error", "Invalid line target.");
                 return;
             }
         }
 
-        const takenByOther = Object.entries(state.hiderAssignments || {}).some(([playerId, assignment]) => {
-            return playerId !== socket.id && assignment && assignment.lineRef === targetRef;
-        });
+        const takenByOther = Object.entries(state.hiderAssignments || {}).some(
+            ([playerId, assignment]) => playerId !== socket.id && assignment && assignment.lineRef === targetRef
+        );
         if (takenByOther) {
             socket.emit("prophunt-error", "Another hider already controls that line.");
             return;
         }
 
-        state.hiderAssignments[socket.id] = {
-            lineRef: targetRef,
-            text,
-            isNew,
-            confirmed: false
-        };
+        state.hiderAssignments[socket.id] = { lineRef: targetRef, text, isNew, confirmed: false };
         touchRoomByCode(roomCode, "prophunt-edit-line");
-        state.message = `${getPlayerName(room, socket.id)} updated their line.`;
-        emitProphuntState(roomCode);
+        state.message = `${prophuntService.getPlayerName(room, socket.id)} updated their line.`;
+        prophuntService.emitProphuntState(roomCode);
     });
 
     socket.on("prophunt-confirm-hider", ({ roomCode }) => {
         const room = rooms[roomCode];
-        if (!room || room.selectedGame !== "programmerProphunt" || !room.prophunt || !room.prophunt.active) {
-            return;
-        }
+        if (!room || room.selectedGame !== "programmerProphunt" || !room.prophunt || !room.prophunt.active) return;
 
         const state = room.prophunt;
-        if (state.phase !== "hiding") {
-            return;
-        }
-        if (getPlayerTeam(state, socket.id) !== state.hidingTeam) {
-            return;
-        }
+        if (state.phase !== "hiding") return;
+        if (prophuntService.getPlayerTeam(state, socket.id) !== state.hidingTeam) return;
 
         const assignment = state.hiderAssignments[socket.id];
         if (!assignment || !assignment.text.trim()) {
@@ -1620,80 +346,71 @@ io.on("connection", (socket) => {
 
         assignment.confirmed = true;
         touchRoomByCode(roomCode, "prophunt-confirm-hider");
-        const allConfirmed = state.teams[state.hidingTeam].every(playerId => {
+
+        const allConfirmed = state.teams[state.hidingTeam].every((playerId) => {
             const entry = state.hiderAssignments[playerId];
             return entry && entry.confirmed;
         });
 
         if (allConfirmed) {
-            finishProphuntHidingPhase(roomCode, false);
+            prophuntService.finishProphuntHidingPhase(roomCode, false);
             return;
         }
 
-        emitProphuntState(roomCode);
+        prophuntService.emitProphuntState(roomCode);
     });
 
     socket.on("prophunt-confirm-finder", ({ roomCode, lineRef }) => {
         const room = rooms[roomCode];
-        if (!room || room.selectedGame !== "programmerProphunt" || !room.prophunt || !room.prophunt.active) {
-            return;
-        }
+        if (!room || room.selectedGame !== "programmerProphunt" || !room.prophunt || !room.prophunt.active) return;
 
         const state = room.prophunt;
-        if (state.phase !== "finding") {
-            return;
-        }
-        if (getPlayerTeam(state, socket.id) !== state.finderTeam) {
-            return;
-        }
+        if (state.phase !== "finding") return;
+        if (prophuntService.getPlayerTeam(state, socket.id) !== state.finderTeam) return;
 
         if (state.finderGuesses[socket.id] && state.finderGuesses[socket.id].confirmed) {
             socket.emit("prophunt-error", "You already confirmed your guess for this round.");
             return;
         }
 
-        const composed = buildProphuntComposedLines(room, state);
-        const exists = composed.some(line => line.ref === lineRef);
-        if (!exists) {
+        const composed = prophuntService.buildProphuntComposedLines(room, state);
+        if (!composed.some((line) => line.ref === lineRef)) {
             socket.emit("prophunt-error", "Choose a valid suspicious line.");
             return;
         }
 
-        const takenByOtherFinder = Object.entries(state.finderGuesses).some(([playerId, guess]) => {
-            return playerId !== socket.id && guess && guess.confirmed && guess.lineRef === lineRef;
-        });
+        const takenByOtherFinder = Object.entries(state.finderGuesses).some(
+            ([playerId, guess]) => playerId !== socket.id && guess && guess.confirmed && guess.lineRef === lineRef
+        );
         if (takenByOtherFinder) {
             socket.emit("prophunt-error", "Another finder already selected that line.");
             return;
         }
 
-        state.finderGuesses[socket.id] = {
-            lineRef,
-            confirmed: true
-        };
+        state.finderGuesses[socket.id] = { lineRef, confirmed: true };
         touchRoomByCode(roomCode, "prophunt-confirm-finder");
 
-        const allConfirmed = state.teams[state.finderTeam].every(playerId => {
+        const allFindersDone = state.teams[state.finderTeam].every((playerId) => {
             const guess = state.finderGuesses[playerId];
             return guess && guess.confirmed;
         });
 
-        if (allConfirmed) {
-            finalizeProphuntRound(roomCode, false);
+        if (allFindersDone) {
+            prophuntService.finalizeProphuntRound(roomCode, false);
             return;
         }
 
-        emitProphuntState(roomCode);
+        prophuntService.emitProphuntState(roomCode);
     });
 
-    socket.on("start-bugfixer", payload => {
+    // ── Bug Fixer Handlers ────────────────────────────────────────────────────
+
+    socket.on("start-bugfixer", (payload) => {
         const roomCode = payload && payload.roomCode;
         const room = rooms[roomCode];
-        if (!room || room.host !== socket.id || room.selectedGame !== "bugFixerGame") {
-            return;
-        }
+        if (!room || room.host !== socket.id || room.selectedGame !== "bugFixerGame") return;
 
-        const error = initializeBugFixer(roomCode, payload || {});
+        const error = bugFixerService.initializeBugFixer(roomCode, payload || {});
         if (error) {
             socket.emit("bugfixer-error", error);
             return;
@@ -1703,18 +420,11 @@ io.on("connection", (socket) => {
 
     socket.on("bugfixer-submit", ({ roomCode, chosenCards }) => {
         const room = rooms[roomCode];
-        if (!room || room.selectedGame !== "bugFixerGame" || !room.bugFixer || !room.bugFixer.active) {
-            return;
-        }
+        if (!room || room.selectedGame !== "bugFixerGame" || !room.bugFixer || !room.bugFixer.active) return;
 
         const round = room.bugFixer.currentRound;
-        if (!round || round.phase !== "submitting") {
-            return;
-        }
-
-        if (socket.id === round.deciderId) {
-            return;
-        }
+        if (!round || round.phase !== "submitting") return;
+        if (socket.id === round.deciderId) return;
 
         const hand = room.bugFixer.hands[socket.id] || [];
         if (!Array.isArray(chosenCards) || chosenCards.length !== round.responsesRequired) {
@@ -1728,8 +438,7 @@ io.on("connection", (socket) => {
             return;
         }
 
-        const valid = chosenCards.every((card) => hand.includes(card));
-        if (!valid) {
+        if (!chosenCards.every((card) => hand.includes(card))) {
             socket.emit("bugfixer-error", "Submission contains cards not in your hand.");
             return;
         }
@@ -1743,23 +452,20 @@ io.on("connection", (socket) => {
 
         const nonDeciderCount = room.players.length - 1;
         if (Object.keys(round.submissions).length >= nonDeciderCount) {
-            enterJudgingPhase(roomCode);
+            bugFixerService.enterJudgingPhase(roomCode);
             return;
         }
 
-        emitBugFixerState(roomCode);
+        bugFixerService.emitBugFixerState(roomCode);
     });
 
     socket.on("bugfixer-pick-winner", ({ roomCode, submissionId }) => {
         const room = rooms[roomCode];
-        if (!room || room.selectedGame !== "bugFixerGame" || !room.bugFixer || !room.bugFixer.active) {
-            return;
-        }
+        if (!room || room.selectedGame !== "bugFixerGame" || !room.bugFixer || !room.bugFixer.active) return;
 
         const round = room.bugFixer.currentRound;
-        if (!round || (round.phase !== "judging" && round.phase !== "confirming") || round.deciderId !== socket.id) {
+        if (!round || (round.phase !== "judging" && round.phase !== "confirming") || round.deciderId !== socket.id)
             return;
-        }
 
         const picked = round.submissionOptions.find((option) => option.submissionId === submissionId);
         if (!picked) {
@@ -1767,43 +473,40 @@ io.on("connection", (socket) => {
             return;
         }
 
-        clearBugFixerTimer(room.bugFixer, "deciderTimeout");
-        clearBugFixerTimer(room.bugFixer, "finalizeTimeout");
+        bugFixerService.clearBugFixerTimer(room.bugFixer, "deciderTimeout");
+        bugFixerService.clearBugFixerTimer(room.bugFixer, "finalizeTimeout");
 
         round.phase = "confirming";
         round.pendingWinnerPlayerId = picked.playerId;
         round.pendingWinnerSubmissionId = picked.submissionId;
-        round.finalizeDeadlineAt = Date.now() + BUG_FIXER_FINALIZE_DELAY_MS;
+        round.finalizeDeadlineAt = Date.now() + constants.BUG_FIXER_FINALIZE_DELAY_MS;
         touchRoomByCode(roomCode, "bugfixer-pick-winner");
 
         room.bugFixer.timerHandles.finalizeTimeout = setTimeout(() => {
-            finalizeBugFixerRound(roomCode, {
+            bugFixerService.finalizeBugFixerRound(roomCode, {
                 winnerPlayerId: picked.playerId,
                 reason: "decider-picked",
             });
-        }, BUG_FIXER_FINALIZE_DELAY_MS);
+        }, constants.BUG_FIXER_FINALIZE_DELAY_MS);
 
         room.bugFixer.lastResult = {
-            message: `${getPlayerName(room, round.deciderId)} selected a winner. Finalizing in 10 seconds (selection can still be changed).`,
+            message: `${bugFixerService.buildBugFixerPayloadForPlayer(room, round.deciderId).deciderName} selected a winner. Finalizing in 10 seconds (selection can still be changed).`,
             revealedSubmissions: [],
         };
 
-        emitBugFixerState(roomCode);
+        bugFixerService.emitBugFixerState(roomCode);
     });
+
+    // ── Game Termination ──────────────────────────────────────────────────────
 
     socket.on("terminate-game", ({ roomCode }) => {
         const room = rooms[roomCode];
-        if (!room || room.host !== socket.id || !room.selectedGame) {
-            return;
-        }
+        if (!room || room.host !== socket.id || !room.selectedGame) return;
 
         const terminatedGame = room.selectedGame;
-        if (room.bugFixer) {
-            clearAllBugFixerTimers(room.bugFixer);
-        }
-        if (room.prophunt) {
-            clearProphuntTimers(room.prophunt);
-        }
+        if (room.bugFixer) clearAllBugFixerTimers(room.bugFixer);
+        if (room.prophunt) clearProphuntTimers(room.prophunt);
+
         room.selectedGame = null;
         room.bugFixer = null;
         room.prophunt = null;
@@ -1814,22 +517,20 @@ io.on("connection", (socket) => {
 
         io.to(roomCode).emit("game-terminated", {
             gameMode: terminatedGame,
-            byHost: getPlayerName(room, socket.id),
+            byHost: room.players.find((player) => player.id === socket.id)?.name || "Host",
         });
     });
 
+    // ── Legacy Game Handlers (LogicCAH / ProgrammerProphunt class-based) ──────
+
     socket.on("leave-game", ({ roomCode }) => {
         const room = rooms[roomCode];
-        if (!room || !room.game || !room.gameMode) {
-            return;
-        }
+        if (!room || !room.game || !room.gameMode) return;
 
-        // Remove player from the game instance
-        if (room.game && typeof room.game.removePlayer === 'function') {
+        if (typeof room.game.removePlayer === "function") {
             room.game.removePlayer(socket.id);
         }
 
-        // Emit game state update to remaining players
         if (room.gameMode === "LogicCAH") {
             io.to(roomCode).emit("game-started", {
                 gameMode: "LogicCAH",
@@ -1844,7 +545,6 @@ io.on("connection", (socket) => {
             });
         }
 
-        // Notify the leaving player that they've left the game
         socket.emit("left-game");
     });
 
@@ -1860,7 +560,6 @@ io.on("connection", (socket) => {
             return;
         }
 
-        // Create game instance
         if (gameMode === "LogicCAH") {
             room.game = new LogicCAH(room.players, numRounds, timeLimit, numPrompts);
         } else if (gameMode === "ProgrammerProphunt") {
@@ -1880,40 +579,26 @@ io.on("connection", (socket) => {
         });
     });
 
-    //CAH rejoin handler
     socket.on("logiccah-rejoin-room", ({ roomCode, name, isHost }) => {
         const room = rooms[roomCode];
-        console.log("logiccah-rejoin-room received", roomCode, name);
-
-        if (!room) {
-            console.log("room not found for", roomCode);
-            return;
-        }
+        if (!room) return;
 
         socket.join(roomCode);
 
-        if (isHost) {
-            room.host = socket.id;
-        }
+        if (isHost) room.host = socket.id;
 
         let player = room.players.find((p) => p.name === name);
-
         if (!player) {
             room.players.push({ id: socket.id, name });
         } else {
             const oldId = player.id;
             player.id = socket.id;
-
-            if (room.host === oldId) {
-                room.host = socket.id;
-            }
-        }   
+            if (room.host === oldId) room.host = socket.id;
+        }
 
         if (room.game && Array.isArray(room.game.players)) {
             const gamePlayer = room.game.players.find((p) => p.name === name);
-            if (gamePlayer) {
-                gamePlayer.id = socket.id;
-            }
+            if (gamePlayer) gamePlayer.id = socket.id;
         }
 
         if (room.game && room.gameMode === "LogicCAH") {
@@ -1944,8 +629,8 @@ io.on("connection", (socket) => {
                     deciderName: room.game.getCurrentDecider().name,
                 });
             }
-        } catch (e) {
-            socket.emit("error", e.message);
+        } catch (error) {
+            socket.emit("error", error.message);
         }
     });
 
@@ -1954,29 +639,25 @@ io.on("connection", (socket) => {
         if (!room || !room.game || room.gameMode !== "LogicCAH") return;
 
         try {
-            const result = room.game.deciderSelectsAnswers(selectedPlayerId);
-
+            room.game.deciderSelectsAnswers(selectedPlayerId);
             const revealed = room.game.revealSelectedPlayer();
+
             io.to(roomCode).emit("selected-player-revealed", {
                 selectedPlayerName: revealed.selectedPlayerName,
                 points: revealed.points,
             });
 
-            // Auto-complete round after 3 seconds
             setTimeout(() => {
                 room.game.completeRound();
                 if (room.game.isGameOver()) {
-                    const finalScores = room.game.getFinalScores();
-                    io.to(roomCode).emit("game-over", { finalScores });
+                    io.to(roomCode).emit("game-over", { finalScores: room.game.getFinalScores() });
                     room.gameState = "LOBBY";
                 } else {
-                    io.to(roomCode).emit("round-completed", {
-                        status: room.game.getGameStatus(),
-                    });
+                    io.to(roomCode).emit("round-completed", { status: room.game.getGameStatus() });
                 }
             }, 3000);
-        } catch (e) {
-            socket.emit("error", e.message);
+        } catch (error) {
+            socket.emit("error", error.message);
         }
     });
 
@@ -1999,8 +680,8 @@ io.on("connection", (socket) => {
                     finderNames: room.game.getFindingTeam().map((p) => p.name),
                 });
             }
-        } catch (e) {
-            socket.emit("error", e.message);
+        } catch (error) {
+            socket.emit("error", error.message);
         }
     });
 
@@ -2034,20 +715,19 @@ io.on("connection", (socket) => {
                 setTimeout(() => {
                     room.game.completeRound();
                     if (room.game.isGameOver()) {
-                        const finalScores = room.game.getFinalScores();
-                        io.to(roomCode).emit("game-over", { finalScores });
+                        io.to(roomCode).emit("game-over", { finalScores: room.game.getFinalScores() });
                         room.gameState = "LOBBY";
                     } else {
-                        io.to(roomCode).emit("round-completed", {
-                            status: room.game.getGameStatus(),
-                        });
+                        io.to(roomCode).emit("round-completed", { status: room.game.getGameStatus() });
                     }
                 }, 3000);
             }
-        } catch (e) {
-            socket.emit("error", e.message);
+        } catch (error) {
+            socket.emit("error", error.message);
         }
     });
+
+    // ── Game Hub Navigation ───────────────────────────────────────────────────
 
     socket.on("host-entering-gamehub", ({ roomCode }) => {
         const room = rooms[roomCode];
@@ -2066,18 +746,18 @@ io.on("connection", (socket) => {
     socket.on("launch-redirect-game", ({ roomCode, url }) => {
         const room = rooms[roomCode];
         if (!room || room.host !== socket.id) return;
-        const allowed = ["/codeTyper/", "/flexboxSpider/", "/logicCAH/"];
-        if (!allowed.some((allowedUrl) => url.startsWith(allowedUrl))) return;
+        const allowedPrefixes = ["/code-typer/", "/flexbox-spider/", "/logic-cah/"];
+        if (!allowedPrefixes.some((prefix) => url.startsWith(prefix))) return;
         touchRoom(room, "launch-redirect-game");
         socket.to(roomCode).emit("redirect-to-game", { url });
     });
 
+    // ── Code Typer Multiplayer ────────────────────────────────────────────────
+
     socket.on("start-codetyper-multiplayer", (payload) => {
         const roomCode = payload && payload.roomCode;
         const room = rooms[roomCode];
-        if (!room || room.host !== socket.id || room.selectedGame !== "codeTyperMultiplayer") {
-            return;
-        }
+        if (!room || room.host !== socket.id || room.selectedGame !== "codeTyperMultiplayer") return;
 
         touchRoom(room, "start-codetyper-multiplayer");
         io.to(roomCode).emit("launch-codetyper", { roomCode });
@@ -2090,15 +770,19 @@ io.on("connection", (socket) => {
         if (!room.codeTyperMultiplayer) {
             room.codeTyperMultiplayer = { players: {} };
         }
-        room.codeTyperMultiplayer.players[socket.id] = { name, isFinished: false, progress: 0, wpm: 0 };
+        room.codeTyperMultiplayer.players[socket.id] = {
+            name,
+            isFinished: false,
+            progress: 0,
+            wpm: 0,
+        };
         touchRoom(room, "codetyper-rejoin-room");
     });
 
     socket.on("codetyper-progress", ({ roomCode, progress, wpm }) => {
         const room = rooms[roomCode];
-        if (!room || !room.codeTyperMultiplayer || !room.codeTyperMultiplayer.players[socket.id]) {
-            return;
-        }
+        if (!room || !room.codeTyperMultiplayer || !room.codeTyperMultiplayer.players[socket.id]) return;
+
         room.codeTyperMultiplayer.players[socket.id].progress = progress;
         room.codeTyperMultiplayer.players[socket.id].wpm = wpm;
         touchRoom(room, "codetyper-progress");
@@ -2107,9 +791,8 @@ io.on("connection", (socket) => {
 
     socket.on("codetyper-finished", ({ roomCode, time }) => {
         const room = rooms[roomCode];
-        if (!room || !room.codeTyperMultiplayer || !room.codeTyperMultiplayer.players[socket.id]) {
-            return;
-        }
+        if (!room || !room.codeTyperMultiplayer || !room.codeTyperMultiplayer.players[socket.id]) return;
+
         room.codeTyperMultiplayer.players[socket.id].isFinished = true;
         room.codeTyperMultiplayer.players[socket.id].time = time;
         touchRoom(room, "codetyper-finished");
@@ -2123,18 +806,39 @@ io.on("connection", (socket) => {
         io.to(roomCode).emit("codetyper-set-snippet", snippet);
     });
 
+    // ── Disconnect / Cleanup ──────────────────────────────────────────────────
+
     socket.on("client-cleanup", ({ roomCode }) => {
         if (roomCode && rooms[roomCode]) {
             touchRoomByCode(roomCode, "client-cleanup");
         }
-        removeSocketFromRooms(socket.id, "client-cleanup");
+        removeSocketFromRooms(
+            socket.id,
+            "client-cleanup",
+            io,
+            bugFixerService.emitBugFixerState,
+            bugFixerService.startNextBugFixerRound,
+            bugFixerService.ensureBugFixerPlayerState,
+            prophuntService.emitProphuntState,
+            constants
+        );
     });
 
     socket.on("disconnect", () => {
-        removeSocketFromRooms(socket.id, "disconnect");
+        removeSocketFromRooms(
+            socket.id,
+            "disconnect",
+            io,
+            bugFixerService.emitBugFixerState,
+            bugFixerService.startNextBugFixerRound,
+            bugFixerService.ensureBugFixerPlayerState,
+            prophuntService.emitProphuntState,
+            constants
+        );
     });
-
 });
+
+// ─── Server Start ─────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, "0.0.0.0", () => {

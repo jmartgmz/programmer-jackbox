@@ -1,3 +1,9 @@
+/**
+ * @file client.js
+ * @description Core client-side logic for the Programmer Jackbox lobby. Handles Socket.IO connections,
+ * room management, chat, rendering UI views, and game transitions.
+ */
+
 const socket = (() => {
     try {
         return window.io ? io() : null;
@@ -49,8 +55,8 @@ function addRecentRoom(code) {
     const rooms = JSON.parse(localStorage.getItem(STORAGE_KEY_ROOMS) || "[]");
     const next = [normalized, ...rooms.filter((room) => room !== normalized)].slice(0, 5);
     localStorage.setItem(STORAGE_KEY_ROOMS, JSON.stringify(next));
-    if (typeof renderRecentRooms === "function") {
-        renderRecentRooms();
+    if (typeof window.renderRecentRooms === "function") {
+        window.renderRecentRooms();
     }
 }
 
@@ -120,17 +126,19 @@ function renderRandomGameChecklist() {
 
     const mpModes = gamemodes.filter((m) => m.type !== "singleplayer");
     mpModes.forEach((mode) => {
+        const id = `gamemode-${mode.name}`;
         const row = document.createElement("div");
-        const label = document.createElement("label");
-        const checkbox = document.createElement("input");
-
-        checkbox.type = "checkbox";
-        checkbox.name = "randomGameMode";
-        checkbox.value = mode.name;
-
-        label.appendChild(checkbox);
-        label.append(` ${mode.displayName || mode.name} - ${mode.description}`);
-        row.appendChild(label);
+        row.className = "checklist-item";
+        row.innerHTML = `
+            <label class="checklist-item__label" for="${id}">
+                <input type="checkbox" id="${id}" name="randomGameMode" value="${mode.name}" class="checklist-item__checkbox">
+                <span class="checklist-item__icon">${getGameIcon(mode.name)}</span>
+                <span class="checklist-item__text">
+                    <span class="checklist-item__name">${mode.displayName || mode.name}</span>
+                    <span class="checklist-item__desc">${mode.description}</span>
+                </span>
+            </label>
+        `;
         checklist.appendChild(row);
     });
 }
@@ -187,6 +195,24 @@ function showSinglePlayer() {
     renderSinglePlayerCards();
 }
 
+// ============================================
+// SVG ICON MAP
+// ============================================
+const GAME_ICONS = {
+    bugFixerGame: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="6" width="8" height="14"/><line x1="2" y1="10" x2="8" y2="10"/><line x1="16" y1="10" x2="22" y2="10"/><line x1="2" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="22" y2="16"/><line x1="9" y1="6" x2="8" y2="4"/><line x1="15" y1="6" x2="16" y2="4"/></svg>`,
+    codeTyperMultiplayer: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" y1="14" x2="9" y2="18"/><line x1="7" y1="21" x2="9" y2="19"/><line x1="3" y1="19" x2="5" y2="21"/></svg>`,
+    LogicCAH: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
+    programmerProphunt: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+    codeTyper: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="16"/><line x1="6" y1="9" x2="6.01" y2="9"/><line x1="10" y1="9" x2="10.01" y2="9"/><line x1="14" y1="9" x2="14.01" y2="9"/><line x1="18" y1="9" x2="18.01" y2="9"/><line x1="8" y1="13" x2="8.01" y2="13"/><line x1="12" y1="13" x2="12.01" y2="13"/><line x1="16" y1="13" x2="16.01" y2="13"/><line x1="7" y1="17" x2="17" y2="17"/></svg>`,
+    flexboxSpider: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>`,
+    escapeTheLoop: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`,
+    _default: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
+};
+
+function getGameIcon(name) {
+    return GAME_ICONS[name] || GAME_ICONS._default;
+}
+
 function renderSinglePlayerCards() {
     const container = document.getElementById("singlePlayerCards");
     container.innerHTML = "";
@@ -196,7 +222,7 @@ function renderSinglePlayerCards() {
         const card = document.createElement("div");
         card.className = "game-card";
         card.innerHTML = `
-            <div class="game-icon">${mode.icon || "🎮"}</div>
+            <div class="game-icon">${getGameIcon(mode.name)}</div>
             <div class="game-name">${mode.displayName || mode.name}</div>
             <div class="game-desc">${mode.description}</div>
         `;
@@ -336,7 +362,7 @@ function renderGameModeCards() {
         const meets = lastPlayerCount >= mode.minPlayers;
         if (!meets) card.classList.add("unavailable");
         card.innerHTML = `
-            <div class="game-icon">${mode.icon || "🎮"}</div>
+            <div class="game-icon">${getGameIcon(mode.name)}</div>
             <div class="game-name">${mode.displayName || mode.name}</div>
             <div class="game-desc">${mode.description}</div>
             <div class="game-min">Min: ${mode.minPlayers} player${mode.minPlayers !== 1 ? "s" : ""}</div>`;
@@ -445,7 +471,7 @@ function launchSelectedGame() {
         const numPrompts = parseInt(document.getElementById("numPrompts").value);
 
         const url =
-            `/logicCAH/index.html?roomCode=${encodeURIComponent(currentRoomCode)}` +
+            `/logic-cah/index.html?roomCode=${encodeURIComponent(currentRoomCode)}` +
             `&name=${encodeURIComponent(playerName)}` +
             `&isHost=${isHost}` +
             `&numRounds=${numRounds}` +
@@ -489,7 +515,7 @@ socket.on("host-left-gamehub", () => {
 });
 
 socket.on("redirect-to-game", ({ url }) => {
-    if (url.startsWith("/logicCAH/")) {
+    if (url.startsWith("/logic-cah/")) {
         const incoming = new URL(url, window.location.origin);
 
         const numRounds = incoming.searchParams.get("numRounds") || "2";
@@ -497,7 +523,7 @@ socket.on("redirect-to-game", ({ url }) => {
         const numPrompts = incoming.searchParams.get("numPrompts") || "2";
 
         const fixedUrl =
-            `/logicCAH/index.html?roomCode=${encodeURIComponent(currentRoomCode)}` +
+            `/logic-cah/index.html?roomCode=${encodeURIComponent(currentRoomCode)}` +
             `&name=${encodeURIComponent(playerName)}` +
             `&isHost=${isHost}` +
             `&numRounds=${encodeURIComponent(numRounds)}` +
@@ -707,7 +733,7 @@ function startProphuntGame() {
         roomCode: currentRoomCode,
         complexity,
         roundSeconds,
-        rounds
+        rounds,
     });
 }
 
@@ -721,7 +747,7 @@ function applyProphuntEdit() {
     socket.emit("prophunt-edit-line", {
         roomCode: currentRoomCode,
         lineRef,
-        lineText
+        lineText,
     });
 }
 
@@ -741,7 +767,7 @@ function confirmProphuntFinderGuess() {
     const lineRef = document.getElementById("prophuntFinderLineSelect").value;
     socket.emit("prophunt-confirm-finder", {
         roomCode: currentRoomCode,
-        lineRef
+        lineRef,
     });
 }
 
@@ -834,8 +860,14 @@ function renderProphuntControls() {
     }
 
     startButton.classList.toggle("hidden", !(isHost && prophuntState.canStart));
-    hiderControls.classList.toggle("hidden", !(prophuntState.active && prophuntState.role === "hider" && prophuntState.phase === "hiding"));
-    finderControls.classList.toggle("hidden", !(prophuntState.active && prophuntState.role === "finder" && prophuntState.phase === "finding"));
+    hiderControls.classList.toggle(
+        "hidden",
+        !(prophuntState.active && prophuntState.role === "hider" && prophuntState.phase === "hiding")
+    );
+    finderControls.classList.toggle(
+        "hidden",
+        !(prophuntState.active && prophuntState.role === "finder" && prophuntState.phase === "finding")
+    );
 }
 
 function renderProphuntState(state) {
@@ -876,7 +908,7 @@ function renderProphuntState(state) {
     }
 
     if (Array.isArray(state.visibleLines) && state.visibleLines.length > 0) {
-        codeBlock.innerText = state.visibleLines.map(line => `${line.number}. ${line.text}`).join("\n");
+        codeBlock.innerText = state.visibleLines.map((line) => `${line.number}. ${line.text}`).join("\n");
     } else {
         codeBlock.innerText = "Code is hidden for this phase.";
     }
@@ -887,7 +919,7 @@ function renderProphuntState(state) {
 
     lineSelect.innerHTML = "";
     if (Array.isArray(state.editableLineOptions)) {
-        state.editableLineOptions.forEach(option => {
+        state.editableLineOptions.forEach((option) => {
             const el = document.createElement("option");
             el.value = option.ref;
             el.textContent = option.label;
@@ -897,7 +929,7 @@ function renderProphuntState(state) {
 
     finderLineSelect.innerHTML = "";
     if (Array.isArray(state.finderLineOptions)) {
-        state.finderLineOptions.forEach(option => {
+        state.finderLineOptions.forEach((option) => {
             const el = document.createElement("option");
             el.value = option.ref;
             el.textContent = option.label;
@@ -909,7 +941,7 @@ function renderProphuntState(state) {
 
     scoreboard.innerHTML = "";
     if (state.scores) {
-        ["A", "B"].forEach(team => {
+        ["A", "B"].forEach((team) => {
             const li = document.createElement("li");
             li.innerText = `Team ${team}: ${state.scores[team] || 0}`;
             scoreboard.appendChild(li);
@@ -920,14 +952,14 @@ function renderProphuntState(state) {
     renderProphuntControls();
 }
 
-socket.on("prophunt-state", state => {
+socket.on("prophunt-state", (state) => {
     if (selectedGameMode === "programmerProphunt") {
         document.getElementById("prophuntArea").classList.remove("hidden");
     }
     renderProphuntState(state);
 });
 
-socket.on("prophunt-error", message => {
+socket.on("prophunt-error", (message) => {
     alert(message);
 });
 
@@ -1059,7 +1091,7 @@ socket.on("bugfixer-error", (message) => {
 
 socket.on("launch-codetyper", ({ roomCode }) => {
     const iframe = document.getElementById("codeTyperIframe");
-    iframe.src = `/codeTyperMultiplayer/?roomCode=${roomCode}&name=${encodeURIComponent(playerName)}&isHost=${isHost}&t=${Date.now()}`;
+    iframe.src = `/code-typer-multiplayer/?roomCode=${roomCode}&name=${encodeURIComponent(playerName)}&isHost=${isHost}&t=${Date.now()}`;
     document.getElementById("codeTyperArea").classList.remove("hidden");
 });
 

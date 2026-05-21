@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Escape the Loop</title>
+        <link rel="stylesheet" href="/escape-the-loop/escape-the-loop.css" />
+    </head>
+    <body>
+        <header class="header">
+            <h2>Escape the Loop</h2>
+            <div class="controls">
+                <span id="level-indicator">Level 1</span>
+                <button id="btn-run" class="btn btn-primary">Run Script</button>
+                <button id="btn-clear" class="btn btn-secondary">Clear Script</button>
+                <a href="/" class="btn btn-home"><button type="button">Main Menu</button></a>
+            </div>
+        </header>
+
+        <main class="game-container">
+            <!-- 2D Grid Factory Floor -->
+            <section class="factory">
+                <div id="grid-container" class="grid-container"></div>
+                <div id="game-status" class="game-status">Awaiting commands...</div>
+            </section>
+
+            <!-- Programming Interface -->
+            <section class="programming-interface">
+                <div class="toolbox">
+                    <h2>Toolbox</h2>
+                    <div class="toolbox-items" id="toolbox" aria-label="Available commands">
+                        <div class="block cmd-forward" draggable="true" data-type="forward">
+                            <span>Move_Forward()</span>
+                        </div>
+                        <div class="block cmd-turn-left" draggable="true" data-type="turnLeft">
+                            <span>Turn_Left()</span>
+                        </div>
+                        <div class="block cmd-turn-right" draggable="true" data-type="turnRight">
+                            <span>Turn_Right()</span>
+                        </div>
+                        <!-- Loop block acts as a container -->
+                        <div class="block cmd-loop block-container-template" draggable="true" data-type="loop">
+                            <div class="loop-header">
+                                Loop <input type="number" min="2" max="10" value="2" class="loop-count" /> times
+                            </div>
+                            <div class="loop-body dropzone"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="script-area">
+                    <h2>Assembly Line</h2>
+                    <div class="script-container dropzone" id="script-container">
+                        <!-- Blocks dropped here -->
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <script src="/escape-the-loop/levels.js"></script>
+        <script src="/escape-the-loop/escape-the-loop.js"></script>
+    </body>
+</html>
