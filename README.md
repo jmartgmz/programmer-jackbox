@@ -6,19 +6,19 @@ A browser-based party game platform for developers. One player hosts a room, eve
 
 ### Multiplayer
 
-| Game | Players | Description |
-|---|---|---|
-| **Bug Fixer** | 3+ | Pitch the best bug-fix strategy card to the round's decider |
-| **Code Typer (Versus)** | 2+ | Race opponents to type code snippets the fastest |
-| **Logic CAH** | 4+ | Logic-based card prompts — players answer, decider picks the best |
-| **Programmer Prophunt** | 4+ | Hiders plant suspicious lines of code; finders must spot them |
+| Game                    | Players | Description                                                       |
+| ----------------------- | ------- | ----------------------------------------------------------------- |
+| **Bug Fixer**           | 3+      | Pitch the best bug-fix strategy card to the round's decider       |
+| **Code Typer (Versus)** | 2+      | Race opponents to type code snippets the fastest                  |
+| **Logic CAH**           | 4+      | Logic-based card prompts — players answer, decider picks the best |
+| **Programmer Prophunt** | 4+      | Hiders plant suspicious lines of code; finders must spot them     |
 
 ### Solo Arcade
 
-| Game | Description |
-|---|---|
-| **Code Typer** | Speed-type code snippets as fast and accurately as possible |
-| **Flexbox Spider** | Control a spider using CSS flexbox properties to reach its web |
+| Game                | Description                                                                 |
+| ------------------- | --------------------------------------------------------------------------- |
+| **Code Typer**      | Speed-type code snippets as fast and accurately as possible                 |
+| **Flexbox Spider**  | Control a spider using CSS flexbox properties to reach its web              |
 | **Escape the Loop** | Program a robot to navigate a factory floor with drag-and-drop logic blocks |
 
 ## Setup
@@ -56,9 +56,9 @@ Individual simulation scripts are also available (`npm run sim:lobby`, `npm run 
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `PORT` | `3000` | Port the server listens on |
+| Variable | Default | Description                |
+| -------- | ------- | -------------------------- |
+| `PORT`   | `3000`  | Port the server listens on |
 
 ## Architecture
 

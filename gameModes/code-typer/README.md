@@ -1,6 +1,7 @@
 # Code Typer
 
 ## Description
+
 Each round, players are presented with a long block of code in a programming language. The objective is to retype the code as accurately and quickly as possible. The game evaluates players based on their typing speed (words per minute), accuracy, and errors.
 
 Supports various programming languages for code blocks, tracks player performance metrics in real-time and displays a leaderboard after each round.
@@ -8,6 +9,7 @@ Supports various programming languages for code blocks, tracks player performanc
 Maybe also include an option for a random language to be chosen and the user also has to guess in the end what language you typed.
 
 ## Scoring
+
 - Words per minute (WPM)
 - Number of errors
 - Overall accuracy percentage

@@ -1,6 +1,7 @@
 # Bug Fixer
 
 ## Description
+
 In this game, players are presented with a prompt card that displays an issue or situation a programmer might run into each turn.
 All but one player must play response cards equal to the number required by the prompt card that attempt to tackle the issue or situation. The one player who does not play cards is the decider, and they will select the played hand they most agree with.
 
@@ -11,4 +12,5 @@ Players take turns as the decider until all have gone, where the order repeats f
 At the end of a turn after the decider's choice is confirmed, the prompt card is shuffled back into the prompt deck, the players draw response cards to return to a hand of 5 cards, and then the response cards from the turn are reshuffled back into the response deck.
 
 ## Settings
+
 When initializing the game, the host decides the points needed to win the game, as well as if and how long each person has to play a card and how long the decider has to pick a played hand. If a player does not play within the time limit, two cards will be chosen randomly from their hand. If the decider does not choose within time, the host can choose whether the point is given to the player with the lowest score or no point is given.
