@@ -82,7 +82,7 @@ io.on("connection", (socket) => {
     socket.on("lobby-chat", ({ roomCode, name, message }) => {
         const room = rooms[roomCode];
         if (!room) return;
-        io.to(roomCode).emit("lobby-chat", { name, message });
+        socket.to(roomCode).emit("lobby-chat", { name, message });
     });
 
     socket.on("lobby-reaction", ({ roomCode, name, emoji }) => {
